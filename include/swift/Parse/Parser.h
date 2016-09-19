@@ -1239,7 +1239,6 @@ public:
   enum class WhereClauseKind : unsigned {
     Declaration,
     Protocol,
-    AssociatedType
   };
   ParserStatus
   parseFreestandingGenericWhereClause(GenericParamList *&GPList,

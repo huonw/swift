@@ -2493,12 +2493,16 @@ class AssociatedTypeDecl : public AbstractTypeParamDecl {
   LazyMemberLoader *Resolver = nullptr;
   uint64_t ResolverContextData;
 
+  TrailingWhereClause *TrailingWhere;
+
 public:
   AssociatedTypeDecl(DeclContext *dc, SourceLoc keywordLoc, Identifier name,
-                     SourceLoc nameLoc, TypeLoc defaultDefinition);
+                     SourceLoc nameLoc, TypeLoc defaultDefinition,
+                     TrailingWhereClause *trailingWhereClause);
   AssociatedTypeDecl(DeclContext *dc, SourceLoc keywordLoc, Identifier name,
                      SourceLoc nameLoc, LazyMemberLoader *definitionResolver,
-                     uint64_t resolverData);
+                     uint64_t resolverData,
+                     TrailingWhereClause *trailingWhereClause);
 
   /// Get the protocol in which this associated type is declared.
   ProtocolDecl *getProtocol() const {
@@ -2531,6 +2535,14 @@ public:
   /// Toggle whether or not the declaration is being validated.
   void setIsBeingTypeChecked(bool ibt = true) {
     AssociatedTypeDeclBits.BeingTypeChecked = ibt;
+  }
+
+  /// Retrieve the trailing where clause for this associated type, if any.
+  TrailingWhereClause *getTrailingWhereClause() const { return TrailingWhere; }
+
+  /// Set the trailing where clause for this associated type.
+  void setTrailingWhereClause(TrailingWhereClause *trailingWhereClause) {
+    TrailingWhere = trailingWhereClause;
   }
 
   static bool classof(const Decl *D) {

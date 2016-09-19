@@ -2995,15 +2995,28 @@ ParserResult<TypeDecl> Parser::parseDeclAssociatedType(Parser::ParseDeclOptions 
     if (UnderlyingTy.isNull())
       return Status;
   }
-  
+
+  TrailingWhereClause *trailingWhereClause = nullptr;
+
   // Parse a 'where' clause if present. These are not supported, but we will
   // get better QoI this way.
   if (Tok.is(tok::kw_where)) {
-    GenericParamList *unused = nullptr;
-    auto whereStatus = parseFreestandingGenericWhereClause(
-        unused, WhereClauseKind::AssociatedType);
-    if (whereStatus.shouldStopParsing())
-      return whereStatus;
+    SourceLoc whereLoc;
+    SmallVector<RequirementRepr, 4> requirements;
+    bool firstTypeInComplete;
+    auto whereStatus =
+        parseGenericWhereClause(whereLoc, requirements, firstTypeInComplete);
+    if (whereStatus.isSuccess()) {
+      trailingWhereClause =
+          TrailingWhereClause::create(Context, whereLoc, requirements);
+    } else if (whereStatus.hasCodeCompletion()) {
+      if (CodeCompletion && firstTypeInComplete) {
+        CodeCompletion->completeGenericParams(
+            nullptr); // FIXME: what does this mean?
+      } else {
+        return makeParserCodeCompletionResult<AssociatedTypeDecl>();
+      }
+    }
   }
 
   if (!Flags.contains(PD_InProtocol)) {
@@ -3012,10 +3025,10 @@ ParserResult<TypeDecl> Parser::parseDeclAssociatedType(Parser::ParseDeclOptions 
     Status.setIsParseError();
     return Status;
   }
-  
-  auto assocType = new (Context) AssociatedTypeDecl(CurDeclContext,
-                                                    AssociatedTypeLoc, Id, IdLoc,
-                                                    UnderlyingTy.getPtrOrNull());
+
+  auto assocType = new (Context)
+      AssociatedTypeDecl(CurDeclContext, AssociatedTypeLoc, Id, IdLoc,
+                         UnderlyingTy.getPtrOrNull(), trailingWhereClause);
   assocType->getAttrs() = Attributes;
   if (!Inherited.empty())
     assocType->setInherited(Context.AllocateCopy(Inherited));

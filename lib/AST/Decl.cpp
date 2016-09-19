@@ -2276,24 +2276,24 @@ bool GenericTypeParamDecl::isProtocolSelf() const {
   return dc->getProtocolSelf() == this;
 }
 
-
 AssociatedTypeDecl::AssociatedTypeDecl(DeclContext *dc, SourceLoc keywordLoc,
                                        Identifier name, SourceLoc nameLoc,
-                                       TypeLoc defaultDefinition)
-  : AbstractTypeParamDecl(DeclKind::AssociatedType, dc, name, nameLoc),
-    KeywordLoc(keywordLoc), DefaultDefinition(defaultDefinition)
-{
+                                       TypeLoc defaultDefinition,
+                                       TrailingWhereClause *trailingWhereClause)
+    : AbstractTypeParamDecl(DeclKind::AssociatedType, dc, name, nameLoc),
+      KeywordLoc(keywordLoc), DefaultDefinition(defaultDefinition),
+      TrailingWhere(trailingWhereClause) {
   AssociatedTypeDeclBits.Recursive = 0;
 }
 
 AssociatedTypeDecl::AssociatedTypeDecl(DeclContext *dc, SourceLoc keywordLoc,
                                        Identifier name, SourceLoc nameLoc,
                                        LazyMemberLoader *definitionResolver,
-                                       uint64_t resolverData)
-  : AbstractTypeParamDecl(DeclKind::AssociatedType, dc, name, nameLoc),
-    KeywordLoc(keywordLoc), Resolver(definitionResolver),
-    ResolverContextData(resolverData)
-{
+                                       uint64_t resolverData,
+                                       TrailingWhereClause *trailingWhereClause)
+    : AbstractTypeParamDecl(DeclKind::AssociatedType, dc, name, nameLoc),
+      KeywordLoc(keywordLoc), Resolver(definitionResolver),
+      ResolverContextData(resolverData), TrailingWhere(trailingWhereClause) {
   assert(Resolver && "missing resolver");
   AssociatedTypeDeclBits.Recursive = 0;
 }

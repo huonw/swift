@@ -8,8 +8,6 @@ typealias gimel where A : B // expected-error {{'where' clause cannot be attache
 class dalet where A : B {} // expected-error {{'where' clause cannot be attached to a non-generic declaration}}
 
 protocol he where A : B { // expected-error {{'where' clause cannot be attached to a protocol declaration}}
-
-  associatedtype vav where A : B // expected-error {{'where' clause cannot be attached to an associated type declaration}}
 }
 
 

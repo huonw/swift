@@ -2298,10 +2298,12 @@ Decl *ModuleFile::getDecl(DeclID DID, Optional<DeclContext *> ForcedContext) {
     if (declOrOffset.isComplete())
       return declOrOffset;
 
-    auto assocType = createDecl<AssociatedTypeDecl>(DC, SourceLoc(),
-                                                    getIdentifier(nameID),
-                                                    SourceLoc(), this,
-                                                    defaultDefinitionID);
+    auto assocType =
+        createDecl<AssociatedTypeDecl>(DC, SourceLoc(), getIdentifier(nameID),
+                                       SourceLoc(), this, defaultDefinitionID,
+                                       // the information in the where clause
+                                       // has been pushed up into the protocol
+                                       nullptr);
     declOrOffset = assocType;
 
     assocType->computeType();
