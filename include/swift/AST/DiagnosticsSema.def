@@ -1531,6 +1531,10 @@ ERROR(requires_generic_params_made_equal,none,
 ERROR(requires_generic_param_made_equal_to_concrete,none,
       "same-type requirement makes generic parameter %0 non-generic",
       (Identifier))
+// FIXME use this somewhere to avoid `associatedtype T where T == Int` etc.
+ERROR(requires_associated_type_made_equal_to_concrete, none,
+      "same-type requirement makes associated type %0 non-generic",
+      (Identifier))
 ERROR(requires_superclass_conflict,none,
       "generic parameter %0 cannot be a subclass of both %1 and %2",
       (Identifier, Type, Type))
