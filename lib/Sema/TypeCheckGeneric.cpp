@@ -251,6 +251,50 @@ Type CompleteGenericTypeResolver::resolveTypeOfDecl(TypeDecl *decl) {
   return decl->getDeclaredInterfaceType();
 }
 
+bool TypeChecker::validateRequirement(SourceLoc WhereLoc, RequirementRepr &Req,
+                                      DeclContext *DC,
+                                      TypeResolutionOptions options,
+                                      GenericTypeResolver *resolver) {
+  switch (Req.getKind()) {
+  case RequirementReprKind::TypeConstraint: {
+    // Validate the types.
+    if (validateType(Req.getSubjectLoc(), DC, options, resolver)) {
+      Req.setInvalid();
+      return true;
+    }
+
+    if (validateType(Req.getConstraintLoc(), DC, options, resolver)) {
+      Req.setInvalid();
+      return true;
+    }
+
+    // FIXME: Feels too early to perform this check.
+    if (!Req.getConstraint()->isExistentialType() &&
+        !Req.getConstraint()->getClassOrBoundGenericClass()) {
+      diagnose(WhereLoc, diag::requires_conformance_nonprotocol,
+               Req.getSubjectLoc(), Req.getConstraintLoc());
+      Req.getConstraintLoc().setInvalidType(Context);
+      Req.setInvalid();
+      return true;
+    }
+
+    return false;
+  }
+
+  case RequirementReprKind::SameType:
+    if (validateType(Req.getFirstTypeLoc(), DC, options, resolver)) {
+      Req.setInvalid();
+      return true;
+    }
+
+    if (validateType(Req.getSecondTypeLoc(), DC, options, resolver)) {
+      Req.setInvalid();
+      return true;
+    }
+    return false;
+  }
+}
+
 /// Check the generic parameters in the given generic parameter list (and its
 /// parent generic parameter lists) according to the given resolver.
 void TypeChecker::checkGenericParamList(ArchetypeBuilder *builder,
@@ -312,52 +356,14 @@ void TypeChecker::checkGenericParamList(ArchetypeBuilder *builder,
     if (req.isInvalid())
       continue;
 
-    switch (req.getKind()) {
-    case RequirementReprKind::TypeConstraint: {
-      // Validate the types.
-      if (validateType(req.getSubjectLoc(), lookupDC, options, resolver)) {
-        req.setInvalid();
-        continue;
-      }
-
-      if (validateType(req.getConstraintLoc(), lookupDC, options,
-                       resolver)) {
-        req.setInvalid();
-        continue;
-      }
-
-      // FIXME: Feels too early to perform this check.
-      if (!req.getConstraint()->isExistentialType() &&
-          !req.getConstraint()->getClassOrBoundGenericClass()) {
-        diagnose(genericParams->getWhereLoc(),
-                 diag::requires_conformance_nonprotocol,
-                 req.getSubjectLoc(), req.getConstraintLoc());
-        req.getConstraintLoc().setInvalidType(Context);
-        req.setInvalid();
-        continue;
-      }
-
-      break;
+    if (validateRequirement(genericParams->getWhereLoc(), req, lookupDC,
+                            options, resolver)) {
+      continue;
     }
 
-    case RequirementReprKind::SameType:
-      if (validateType(req.getFirstTypeLoc(), lookupDC, options,
-                       resolver)) {
-        req.setInvalid();
-        continue;
-      }
-
-      if (validateType(req.getSecondTypeLoc(), lookupDC, options,
-                       resolver)) {
-        req.setInvalid();
-        continue;
-      }
-      
-      break;
-    }
-    
-    if (builder && builder->addRequirement(req))
+    if (builder && builder->addRequirement(req)) {
       req.setInvalid();
+    }
   }
 }
 

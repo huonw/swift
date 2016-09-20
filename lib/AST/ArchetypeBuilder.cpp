@@ -947,7 +947,14 @@ bool ArchetypeBuilder::addConformanceRequirement(PotentialArchetype *PAT,
           return true;
       }
 
-      continue;
+      if (auto TrailingWhereClause = AssocType->getTrailingWhereClause()) {
+        for (auto &req : TrailingWhereClause->getRequirements()) {
+          if (req.isInvalid()) {
+            continue;
+          }
+          addRequirement(req);
+        }
+      }
     }
 
     // FIXME: Requirement declarations.

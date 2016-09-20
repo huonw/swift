@@ -7169,6 +7169,22 @@ void TypeChecker::validateDecl(ValueDecl *D, bool resolveTypeParams) {
     for (auto member : proto->getMembers()) {
       if (auto assocType = dyn_cast<AssociatedTypeDecl>(member)) {
         resolveInheritanceClause(assocType);
+
+        if (auto trailingWhereClause = assocType->getTrailingWhereClause()) {
+          DeclContext *lookupDC = assocType->getDeclContext();
+          // FIXME work out what (if any) these should be
+          TypeResolutionOptions options;
+          GenericTypeResolver *resolver = nullptr;
+
+          for (auto &req : trailingWhereClause->getRequirements()) {
+            if (req.isInvalid())
+              continue;
+
+            // FIXME: handle the error?
+            validateRequirement(trailingWhereClause->getWhereLoc(), req,
+                                lookupDC, options, resolver);
+          }
+        }
       }
     }
 

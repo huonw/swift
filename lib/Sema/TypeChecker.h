@@ -1014,6 +1014,11 @@ public:
   void configureInterfaceType(AbstractFunctionDecl *func,
                               GenericSignature *sig);
 
+  bool validateRequirement(SourceLoc WhereLoc, RequirementRepr &Req,
+                           DeclContext *DC,
+                           TypeResolutionOptions options = None,
+                           GenericTypeResolver *resolver = nullptr);
+
   /// Validate the signature of a generic function.
   ///
   /// \param func The generic function.
