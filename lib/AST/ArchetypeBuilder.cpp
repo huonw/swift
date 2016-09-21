@@ -907,6 +907,42 @@ bool ArchetypeBuilder::addConformanceRequirement(PotentialArchetype *PAT,
   return addConformanceRequirement(PAT, Proto, Source, Visited);
 }
 
+static bool addAssociatedTypeRequirement(ArchetypeBuilder &builder,
+                                         RequirementRepr &req,
+                                         ProtocolDecl *protocol) {
+  switch (req.getKind()) {
+  case RequirementReprKind::SameType: {
+    auto checkType = [&](Type type, SourceLoc loc) {
+      if (auto *depMemType = type->getAs<DependentMemberType>()) {
+        auto assocType = depMemType->getAssocType();
+
+        // FIXME: checking for non-null isn't obviously correct to me, but it
+        // seems to be required in some cases
+        if (assocType && assocType->getProtocol() == protocol) {
+          builder.getASTContext().Diags.diagnose(
+              loc, diag::requires_associated_type_made_equal_to_concrete,
+              depMemType->getName());
+          return true;
+        }
+      }
+      return false;
+    };
+    if (checkType(req.getFirstType(), req.getFirstTypeLoc().getLoc())) {
+      return true;
+    }
+    if (checkType(req.getSecondType(), req.getSecondTypeLoc().getLoc())) {
+      return true;
+    }
+    break;
+  }
+  case RequirementReprKind::TypeConstraint:
+    /* nothing to do */
+    break;
+  }
+  builder.addRequirement(req);
+  return false;
+}
+
 bool ArchetypeBuilder::addConformanceRequirement(PotentialArchetype *PAT,
                                                  ProtocolDecl *Proto,
                                                  RequirementSource Source,
@@ -952,7 +988,10 @@ bool ArchetypeBuilder::addConformanceRequirement(PotentialArchetype *PAT,
           if (req.isInvalid()) {
             continue;
           }
-          addRequirement(req);
+          if (addAssociatedTypeRequirement(*this, req, Proto)) {
+            req.setInvalid();
+            return true;
+          }
         }
       }
     }
