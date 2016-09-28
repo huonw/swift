@@ -831,8 +831,17 @@ LazyResolver *ArchetypeBuilder::getLazyResolver() const {
   return Context.getLazyResolver();
 }
 
-auto ArchetypeBuilder::resolveArchetype(Type type) -> PotentialArchetype * {
+auto ArchetypeBuilder::resolveArchetype(Type type, PotentialArchetype *selfPAT)
+    -> PotentialArchetype * {
   if (auto genericParam = type->getAs<GenericTypeParamType>()) {
+    if (genericParam->getDecl() && genericParam->getDecl()->isProtocolSelf()) {
+      if (selfPAT) {
+        return selfPAT;
+      }
+    } else {
+      assert(!selfPAT && "non-null selfPAT for non-Self generic type param");
+    }
+
     auto known
       = Impl->PotentialArchetypes.find(GenericTypeParamKey::forType(genericParam));
     if (known == Impl->PotentialArchetypes.end())
@@ -842,7 +851,7 @@ auto ArchetypeBuilder::resolveArchetype(Type type) -> PotentialArchetype * {
   }
 
   if (auto dependentMember = type->getAs<DependentMemberType>()) {
-    auto base = resolveArchetype(dependentMember->getBase());
+    auto base = resolveArchetype(dependentMember->getBase(), selfPAT);
     if (!base)
       return nullptr;
 
@@ -907,9 +916,10 @@ bool ArchetypeBuilder::addConformanceRequirement(PotentialArchetype *PAT,
   return addConformanceRequirement(PAT, Proto, Source, Visited);
 }
 
-static bool addAssociatedTypeRequirement(ArchetypeBuilder &builder,
-                                         RequirementRepr &req,
-                                         ProtocolDecl *protocol) {
+static bool
+addAssociatedTypeRequirement(ArchetypeBuilder &builder, RequirementRepr &req,
+                             ProtocolDecl *protocol,
+                             ArchetypeBuilder::PotentialArchetype *selfPAT) {
   switch (req.getKind()) {
   case RequirementReprKind::SameType: {
     auto checkType = [&](Type type, SourceLoc loc) {
@@ -939,7 +949,7 @@ static bool addAssociatedTypeRequirement(ArchetypeBuilder &builder,
     /* nothing to do */
     break;
   }
-  builder.addRequirement(req);
+  builder.addRequirement(req, selfPAT);
   return false;
 }
 
@@ -988,7 +998,7 @@ bool ArchetypeBuilder::addConformanceRequirement(PotentialArchetype *PAT,
           if (req.isInvalid()) {
             continue;
           }
-          if (addAssociatedTypeRequirement(*this, req, Proto)) {
+          if (addAssociatedTypeRequirement(*this, req, Proto, PAT)) {
             req.setInvalid();
             return true;
           }
@@ -1486,10 +1496,11 @@ bool ArchetypeBuilder::visitInherited(
   return isInvalid;
 }
 
-bool ArchetypeBuilder::addRequirement(const RequirementRepr &Req) {
+bool ArchetypeBuilder::addRequirement(const RequirementRepr &Req,
+                                      PotentialArchetype *SelfPAT) {
   switch (Req.getKind()) {
   case RequirementReprKind::TypeConstraint: {
-    PotentialArchetype *PA = resolveArchetype(Req.getSubject());
+    PotentialArchetype *PA = resolveArchetype(Req.getSubject(), SelfPAT);
     if (!PA) {
       // FIXME: Poor location information.
       // FIXME: Delay diagnostic until after type validation?
@@ -1529,11 +1540,12 @@ bool ArchetypeBuilder::addRequirement(const RequirementRepr &Req) {
   llvm_unreachable("Unhandled requirement?");
 }
 
-void ArchetypeBuilder::addRequirement(const Requirement &req, 
-                                      RequirementSource source) {
+void ArchetypeBuilder::addRequirement(const Requirement &req,
+                                      RequirementSource source,
+                                      PotentialArchetype *selfPAT) {
   switch (req.getKind()) {
   case RequirementKind::Superclass: {
-    PotentialArchetype *pa = resolveArchetype(req.getFirstType());
+    PotentialArchetype *pa = resolveArchetype(req.getFirstType(), selfPAT);
     if (!pa) return;
 
     assert(req.getSecondType()->getClassOrBoundGenericClass());
@@ -1542,7 +1554,7 @@ void ArchetypeBuilder::addRequirement(const Requirement &req,
   }
 
   case RequirementKind::Conformance: {
-    PotentialArchetype *pa = resolveArchetype(req.getFirstType());
+    PotentialArchetype *pa = resolveArchetype(req.getFirstType(), selfPAT);
     if (!pa) return;
 
     SmallVector<ProtocolDecl *, 4> conformsTo;

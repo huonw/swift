@@ -237,14 +237,16 @@ public:
   ///
   /// \returns true if this requirement makes the set of requirements
   /// inconsistent, in which case a diagnostic will have been issued.
-  bool addRequirement(const RequirementRepr &Req);
+  bool addRequirement(const RequirementRepr &Req,
+                      PotentialArchetype *SelfPAT = nullptr);
 
   /// \brief Add an already-checked requirement.
   ///
   /// Adding an already-checked requirement cannot fail. This is used to
   /// re-inject requirements from outer contexts.
-  void addRequirement(const Requirement &req, RequirementSource source);
-  
+  void addRequirement(const Requirement &req, RequirementSource source,
+                      PotentialArchetype *selfPAT = nullptr);
+
   /// \brief Add all of a generic signature's parameters and requirements.
   ///
   /// FIXME: Requirements from the generic signature are treated as coming from
@@ -304,7 +306,8 @@ public:
   /// signature are fully resolved).
   ///
   /// For any type that cannot refer to an archetype, this routine returns null.
-  PotentialArchetype *resolveArchetype(Type type);
+  PotentialArchetype *resolveArchetype(Type type,
+                                       PotentialArchetype *selfPAT = nullptr);
 
   /// \brief Resolve the given dependent type using our context archetypes.
   ///
