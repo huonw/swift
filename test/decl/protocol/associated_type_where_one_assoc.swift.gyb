@@ -1,0 +1,177 @@
+// RUN: rm -rf %t  &&  mkdir -p %t
+//
+// RUN: %gyb %s -o %t/associated_type_where_one_assoc.swift
+// RUN: %target-build-swift -g -module-name a %t/associated_type_where_one_assoc.swift -o %t.out
+// RUN: %target-run %t.out
+// REQUIRES: executable_test
+
+protocol Basic {
+    func doAThing()
+}
+extension Int: Basic {
+    func doAThing() {}
+}
+extension String: Basic {
+    func doAThing() {}
+}
+
+func needs_basic<T: Basic>(_ x: T) {
+    x.doAThing()
+}
+func needs_int(_ x: Int) {}
+
+// ------
+
+// various permutations of declaring protocols with a single associated type
+// with a where clause
+
+protocol SingleProtocol1 {
+    associatedtype A where A: Basic
+    var a: A { get }
+}
+protocol SingleProtocol2 {
+    associatedtype B where B: Basic
+    var b: B { get }
+}
+
+
+protocol MultipleProtocol1 {
+    associatedtype T where T: Basic & SingleProtocol1
+    var t: T { get }
+}
+protocol MultipleProtocol2 {
+    associatedtype T where T: Basic, T: SingleProtocol1
+    var t: T { get }
+}
+protocol MultipleProtocol3 {
+    associatedtype T: Basic where T: SingleProtocol1
+    var t: T { get }
+}
+protocol MultipleProtocol4 {
+    associatedtype T: SingleProtocol1 where T: Basic
+    var t: T { get }
+}
+
+protocol MultipleProtocol5 {
+    associatedtype T where T: SingleProtocol1, T: SingleProtocol2
+    var t: T { get }
+}
+protocol MultipleProtocol6 {
+    associatedtype T: SingleProtocol1 where T: SingleProtocol2
+    var t: T { get }
+}
+protocol MultipleProtocol7 {
+    associatedtype T where T: SingleProtocol1 & SingleProtocol2
+    var t: T { get }
+}
+
+protocol SameType1 {
+    associatedtype T where T: SingleProtocol1, T.A == Int
+    var t: T { get }
+}
+
+protocol SameType2 {
+    associatedtype T: SingleProtocol1 where T.A == Int
+    var t: T { get }
+}
+
+// ------
+
+// let's conform to these protocols
+
+struct Foo: Basic {
+    func doAThing() {}
+}
+
+extension Foo: SingleProtocol1 {
+    var a: Int { return 0 }
+
+    typealias A = Int
+}
+
+extension Foo: SingleProtocol2 {
+    var b: String { return "" }
+
+    typealias B = String
+}
+
+struct Bar: SingleProtocol1, SingleProtocol2 {
+    var a = 0
+    var b = ""
+
+    typealias A = Int
+    typealias B = String
+}
+
+// the protocols/typealiases are intentionally swapped
+struct Baz: SingleProtocol1 {
+    var a = 0
+    var b = ""
+
+    typealias B = String
+}
+extension Baz: SingleProtocol2 {
+    typealias A = Int
+}
+
+% for i in range(1, 4 + 1):
+struct Qux${i}: MultipleProtocol${i} {
+    var t: Foo { return Foo() }
+
+    typealias T = Foo
+}
+% end
+
+% for i in range(5, 7 + 1):
+struct Qux${i}: MultipleProtocol${i} {
+    var t: Baz { return Baz() }
+
+    typealias T = Baz
+}
+% end
+
+% for i in range(1, 2 + 1):
+struct Quz${i}: SameType${i} {
+    var t: Foo { return Foo() }
+
+    typealias T = Foo
+}
+% end
+
+// ------
+
+// now lets use them as generic bounds to make sure the compiler can infer
+// things, and call the functions to make sure everything's hooked up right in
+// the backend
+
+func single_protocol1<T: SingleProtocol1>(_ x: T) {
+    needs_basic(x.a)
+}
+single_protocol1(Foo())
+func single_protocol2<T: SingleProtocol2>(_ x: T) {
+    needs_basic(x.b)
+}
+single_protocol2(Foo())
+
+% for i in range(1, 4 + 1):
+func multiple_protocol${i}<T: MultipleProtocol${i}>(_ x: T) {
+    needs_basic(x.t)
+    needs_basic(x.t.a)
+}
+multiple_protocol${i}(Qux${i}())
+% end
+
+% for i in range(5, 7 + 1):
+func multiple_protocol${i}<T: MultipleProtocol${i}>(_ x: T) {
+    needs_basic(x.t.a)
+    needs_basic(x.t.b)
+}
+multiple_protocol${i}(Qux${i}())
+% end
+
+% for i in range(1, 2 + 1):
+func same_type${i}<T: SameType${i}>(_ x: T) {
+    needs_int(x.t.a)
+}
+same_type${i}(Quz${i}())
+% end
