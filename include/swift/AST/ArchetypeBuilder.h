@@ -237,8 +237,10 @@ public:
   ///
   /// \returns true if this requirement makes the set of requirements
   /// inconsistent, in which case a diagnostic will have been issued.
-  bool addRequirement(const RequirementRepr &Req,
-                      PotentialArchetype *SelfPAT = nullptr);
+  bool addRequirement(
+      const RequirementRepr &Req,
+      RequirementSource::Kind SourceKind = RequirementSource::Explicit,
+      PotentialArchetype *SelfPAT = nullptr);
 
   /// \brief Add an already-checked requirement.
   ///

@@ -949,7 +949,7 @@ addAssociatedTypeRequirement(ArchetypeBuilder &builder, RequirementRepr &req,
     /* nothing to do */
     break;
   }
-  builder.addRequirement(req, selfPAT);
+  builder.addRequirement(req, RequirementSource::Kind::Protocol, selfPAT);
   return false;
 }
 
@@ -1497,6 +1497,7 @@ bool ArchetypeBuilder::visitInherited(
 }
 
 bool ArchetypeBuilder::addRequirement(const RequirementRepr &Req,
+                                      RequirementSource::Kind SourceKind,
                                       PotentialArchetype *SelfPAT) {
   switch (Req.getKind()) {
   case RequirementReprKind::TypeConstraint: {
@@ -1510,7 +1511,7 @@ bool ArchetypeBuilder::addRequirement(const RequirementRepr &Req,
     }
 
     // Check whether this is a supertype requirement.
-    RequirementSource source(RequirementSource::Explicit,
+    RequirementSource source(SourceKind,
                              Req.getConstraintLoc().getSourceRange().Start);
     if (Req.getConstraint()->getClassOrBoundGenericClass()) {
       return addSuperclassRequirement(PA, Req.getConstraint(), source);
@@ -1531,10 +1532,9 @@ bool ArchetypeBuilder::addRequirement(const RequirementRepr &Req,
   }
 
   case RequirementReprKind::SameType:
-    return addSameTypeRequirement(Req.getFirstType(), 
-                                  Req.getSecondType(),
-                                  RequirementSource(RequirementSource::Explicit,
-                                                    Req.getEqualLoc()));
+    return addSameTypeRequirement(
+        Req.getFirstType(), Req.getSecondType(),
+        RequirementSource(SourceKind, Req.getEqualLoc()));
   }
 
   llvm_unreachable("Unhandled requirement?");
