@@ -1,0 +1,170 @@
+// RUN: rm -rf %t  &&  mkdir -p %t
+//
+// RUN: %gyb %s -o %t/associated_type_where_multiple_assoc.swift
+// RUN: %target-build-swift -g -module-name a %t/associated_type_where_multiple_assoc.swift -o %t.out
+// RUN: %target-run %t.out
+// REQUIRES: executable_test
+
+protocol Basic {
+    func doAThing()
+}
+extension Int: Basic {
+    func doAThing() {}
+}
+extension String: Basic {
+    func doAThing() {}
+}
+
+func needs_basic<T: Basic>(_ x: T) {
+    x.doAThing()
+}
+func needs_string(_: String) {}
+func same_type<T>(_: T, _: T) {}
+
+protocol SingleProtocol1 {
+    associatedtype A
+    associatedtype B where B: Basic
+    var a: A { get }
+    var b: B { get }
+}
+protocol SingleProtocol2 {
+    associatedtype C where C: Basic
+    associatedtype D where D: Basic
+    var c: C { get }
+    var d: D { get }
+}
+
+protocol MultipleProtocol1 {
+    associatedtype T: SingleProtocol1
+    associatedtype U: SingleProtocol1 where U: SingleProtocol2
+    var t: T { get }
+    var u: U { get }
+}
+protocol MultipleProtocol2 {
+    associatedtype T: SingleProtocol1
+    associatedtype U: SingleProtocol2 where T.A == U.C
+    var t: T { get }
+    var u: U { get }
+}
+protocol MultipleProtocol3 {
+    associatedtype T where T: SingleProtocol1
+    associatedtype U where U: SingleProtocol2, T.A == U.C
+    var t: T { get }
+    var u: U { get }
+}
+protocol MultipleProtocol4 {
+    associatedtype T where T: SingleProtocol1, T.B == String
+    associatedtype U where U: SingleProtocol2, T.A == U.C
+    var t: T { get }
+    var u: U { get }
+}
+protocol MultipleProtocol5 {
+    associatedtype T where T: SingleProtocol1, T.A: Basic
+    associatedtype U where U: SingleProtocol2
+                                                                                                     var t: T { get }
+    var u: U { get }
+}
+
+struct Foo: Basic {
+    func doAThing() {}
+}
+
+extension Foo: SingleProtocol1 {
+    var a: Int { return 0 }
+    var b: String { return "" }
+
+    typealias A = Int
+    typealias B = String
+}
+extension Foo: SingleProtocol2 {
+    var c: String { return "" }
+    var d: Int { return 0 }
+
+    typealias C = String
+    typealias D = Int
+}
+
+struct Bar: SingleProtocol1, SingleProtocol2 {
+    var a = 0
+    var b = ""
+    var c = ""
+    var d = 0
+    typealias A = Int
+    typealias B = String
+    typealias C = String
+    typealias D = Int
+}
+
+struct Baz: SingleProtocol1 {
+    var c = ""
+    var d = 0
+
+    typealias C = String
+    typealias D = Int
+}
+extension Baz: SingleProtocol2 {
+    var a: Int { return 0 }
+    var b: String { return "" }
+
+    typealias A = Int
+    typealias B = String
+}
+
+struct Qux: MultipleProtocol1, MultipleProtocol2, MultipleProtocol3, MultipleProtocol4, MultipleProtocol5 {
+    typealias T = Foo
+    typealias U = Bar
+
+    var t = Foo()
+    var u = Bar()
+}
+
+func single_protocol1<T: SingleProtocol1>(_ x: T) {
+    needs_basic(x.b)
+}
+single_protocol1(Foo())
+single_protocol1(Bar())
+single_protocol1(Baz())
+func single_protocol2<T: SingleProtocol2>(_ x: T) {
+    needs_basic(x.c)
+    needs_basic(x.d)
+}
+single_protocol2(Foo())
+single_protocol2(Bar())
+single_protocol2(Baz())
+
+func multiple_protocol1<T: MultipleProtocol1>(_ x: T) {
+    needs_basic(x.t.b)
+    needs_basic(x.u.c)
+    needs_basic(x.u.d)
+}
+multiple_protocol1(Qux())
+func multiple_protocol2<T: MultipleProtocol2>(_ x: T) {
+    needs_basic(x.t.a)
+    needs_basic(x.t.b)
+    needs_basic(x.u.c)
+    needs_basic(x.u.d)
+}
+multiple_protocol2(Qux())
+func multiple_protocol3<T: MultipleProtocol3>(_ x: T) {
+    needs_basic(x.t.a)
+    needs_basic(x.t.b)
+    same_type(x.t.a, x.u.c)
+    needs_basic(x.u.c)
+    needs_basic(x.u.d)
+}
+multiple_protocol3(Qux())
+func multiple_protocol4<T: MultipleProtocol4>(_ x: T) {
+    needs_basic(x.t.a)
+    needs_string(x.t.b)
+    same_type(x.t.a, x.u.c)
+    needs_basic(x.u.c)
+    needs_basic(x.u.d)
+}
+multiple_protocol4(Qux())
+func multiple_protocol5<T: MultipleProtocol5>(_ x: T) {
+    needs_basic(x.t.a)
+    needs_basic(x.t.b)
+    needs_basic(x.u.c)
+    needs_basic(x.u.d)
+}
+multiple_protocol5(Qux())
