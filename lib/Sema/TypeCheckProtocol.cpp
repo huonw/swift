@@ -1751,7 +1751,8 @@ namespace {
 
     void addUsedConformances(ProtocolConformance *conformance);
 
-    bool checkAssociatedTypeSameTypeRequirements(AssociatedTypeDecl *assocType);
+    bool
+    checkAssociatedTypeWhereClauseRequirements(AssociatedTypeDecl *assocType);
 
   public:
     /// Emit any diagnostics that have been delayed.
@@ -3283,7 +3284,7 @@ void ConformanceChecker::resolveTypeWitnesses() {
       if (!assocType)
         continue;
 
-      if (checkAssociatedTypeSameTypeRequirements(assocType)) {
+      if (checkAssociatedTypeWhereClauseRequirements(assocType)) {
         // FIXME: handle errors?
       }
     }
@@ -3774,7 +3775,7 @@ void ConformanceChecker::resolveTypeWitnesses() {
       if (!assocType)
         continue;
 
-      if (checkAssociatedTypeSameTypeRequirements(assocType)) {
+      if (checkAssociatedTypeWhereClauseRequirements(assocType)) {
         // FIXME: handle errors?
       }
     }
@@ -4109,11 +4110,9 @@ void ConformanceChecker::addUsedConformances(ProtocolConformance *conformance) {
   });
 }
 
-bool ConformanceChecker::checkAssociatedTypeSameTypeRequirements(
+bool ConformanceChecker::checkAssociatedTypeWhereClauseRequirements(
     AssociatedTypeDecl *assocType) {
-  // FIXME: doesn't handle `where X.T: Prot`.
-  // FIXME: doesn't handle extra conformance requirements making new same-type
-  // constraints valid (i.e. `where X.T: HasAssocTypeBar, X.T.Bar == Int`).
+  // FIXME: nothing checks X.InvalidAssocType
 
   auto *whereClause = assocType->getTrailingWhereClause();
   if (!whereClause)
@@ -4121,46 +4120,92 @@ bool ConformanceChecker::checkAssociatedTypeSameTypeRequirements(
 
   for (const auto &req : whereClause->getRequirements()) {
     assert(!req.isInvalid() && "invalid requirement reached the type checker");
-    switch (req.getKind()) {
-    case RequirementReprKind::TypeConstraint:
-      continue;
-    case RequirementReprKind::SameType:
-      break;
-    }
 
     auto Proto = Conformance->getProtocol();
     auto genericSelfTy = Proto->getSelfInterfaceType();
     auto concreteSelfTy = Conformance->getType();
-    auto *module = Conformance->getDeclContext()->getParentModule();
+
+    auto *DC = Conformance->getDeclContext();
+    auto *module = DC->getParentModule();
+
     TypeSubstitutionMap substitutions;
     substitutions[genericSelfTy->getCanonicalType().getPointer()] =
         concreteSelfTy;
 
-    auto firstTy = req.getFirstType();
-    auto concreteFirstTy = firstTy.subst(module, substitutions, SubstOptions());
-    assert(concreteFirstTy &&
-           "Substituted Self type was already checked to be valid but failed");
-    concreteFirstTy = concreteFirstTy->getCanonicalType();
+    switch (req.getKind()) {
+    case RequirementReprKind::TypeConstraint: {
+      auto subjectTy = req.getSubject();
+      auto concreteSubjectTy =
+          subjectTy.subst(module, substitutions, SubstOptions());
+      assert(
+          concreteSubjectTy &&
+          "Substituted Self type was already checked to be valid but failed");
+      concreteSubjectTy = concreteSubjectTy->getCanonicalType();
 
-    auto secondTy = req.getSecondType();
-    auto concreteSecondTy =
-        secondTy.subst(module, substitutions, SubstOptions());
-    assert(concreteSecondTy &&
-           "Substituted Self type was already checked to be valid but failed");
-    concreteSecondTy = concreteSecondTy->getCanonicalType();
+      auto constraint = req.getConstraint();
 
-    if (!concreteFirstTy->isEqual(concreteSecondTy)) {
-      diagnoseOrDefer(
-          assocType, true,
-          [&](TypeChecker &tc, NormalProtocolConformance *conformance) {
-            tc.diagnose(assocType,
-                        diag::protocol_witness_unsatisfied_requirement,
-                        req.getKind() == RequirementReprKind::SameType);
-            // more info about the failure.
-            tc.diagnose(req.getEqualLoc(),
-                        diag::protocol_witness_unsatisfied_same_type,
-                        concreteFirstTy, firstTy, concreteSecondTy, secondTy);
-          });
+      bool conforms;
+      bool conformanceReq;
+      if (auto *protConstraint = constraint->getAs<ProtocolType>()) {
+        conformanceReq = true;
+        conforms =
+            TC.conformsToProtocol(concreteSubjectTy, protConstraint->getDecl(),
+                                  DC, ConformanceCheckOptions());
+
+      } else {
+        conformanceReq = false;
+        llvm_unreachable("not handled yet");
+      }
+
+      if (!conforms) {
+        diagnoseOrDefer(
+            assocType, true,
+            [&](TypeChecker &tc, NormalProtocolConformance *conformance) {
+              tc.diagnose(assocType,
+                          diag::protocol_witness_unsatisfied_requirement,
+                          false);
+
+              tc.diagnose(req.getColonLoc(),
+                          diag::protocol_witness_unsatisfied_conforms,
+                          concreteSubjectTy, subjectTy, conformanceReq,
+                          constraint);
+            });
+      }
+
+      break;
+    }
+    case RequirementReprKind::SameType: {
+      auto firstTy = req.getFirstType();
+      auto concreteFirstTy =
+          firstTy.subst(module, substitutions, SubstOptions());
+      assert(
+          concreteFirstTy &&
+          "Substituted Self type was already checked to be valid but failed");
+      concreteFirstTy = concreteFirstTy->getCanonicalType();
+
+      auto secondTy = req.getSecondType();
+      auto concreteSecondTy =
+          secondTy.subst(module, substitutions, SubstOptions());
+      assert(
+          concreteSecondTy &&
+          "Substituted Self type was already checked to be valid but failed");
+      concreteSecondTy = concreteSecondTy->getCanonicalType();
+
+      if (!concreteFirstTy->isEqual(concreteSecondTy)) {
+        diagnoseOrDefer(
+            assocType, true,
+            [&](TypeChecker &tc, NormalProtocolConformance *conformance) {
+              tc.diagnose(assocType,
+                          diag::protocol_witness_unsatisfied_requirement, true);
+
+              tc.diagnose(req.getEqualLoc(),
+                          diag::protocol_witness_unsatisfied_same_type,
+                          concreteFirstTy, firstTy, concreteSecondTy, secondTy);
+            });
+      }
+
+      break;
+    }
     }
   }
   return true;

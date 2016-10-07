@@ -1466,6 +1466,10 @@ NOTE(protocol_witness_unsatisfied_requirement,none,
 NOTE(protocol_witness_unsatisfied_same_type,none,
      "the types %0 (aka %1) and %2 (aka %3) are required to be equivalent",
      (Type, Type, Type, Type))
+NOTE(protocol_witness_unsatisfied_conforms,none,
+     "the type %0 (aka %1) is required to %select{inherit from|conform to}2 %3",
+     (Type, Type, bool, Type))
+
 
 NOTE(protocol_requirement_here,none,
      "requirement %0 declared here", (DeclName))
