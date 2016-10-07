@@ -2,11 +2,12 @@
 
 protocol Base {}
 
-/*protocol UndeclaredAssociatedType {
+protocol UndeclaredAssociatedType {
     associatedtype T where T: Base, T.X: Base // expected-error{{TODO}}
     associatedtype U where U: Base, U.X == Int // expected-error{{TODO}}
-}*/
+}
 
+// check for requirements on associated types that are not satisfied
 struct Conform1: Base {
     func method() {
         print("hello")
@@ -17,39 +18,37 @@ struct Nonconform {}
 
 protocol SimpleWhere {
     associatedtype T where T: Base
-    var t: T { get }
 }
 
-protocol Bounded {
-    associatedtype X where X: SimpleWhere, X.T == Conform1
-    var x: X { get }
+protocol SameType {
+    associatedtype X where X: SimpleWhere, X.T == Conform1 // expected-note{{note the types 'Conform2' (aka 'Self.X.T') and 'Conform1' (aka 'Conform1') are required to be equivalent}}
 }
-/*
+
 struct Foo: SimpleWhere {
     typealias T = Conform1
-    var t = Conform1()
 }
-struct Bar: Bounded {
+struct Bar: SameType {
     typealias X = Foo
-    var x = Foo()
 }
-*/
 
 struct Foo2: SimpleWhere {
     typealias T = Conform2
-    var t = Conform2()
 }
-struct Bar2: Bounded {
-    typealias X = Foo2 // expected-error{{X}}
-    var x = Foo2()
+struct Bar2: SameType { // expected-error{{type 'Bar2' does not conform to protocol 'SameType'}}
+    typealias X = Foo2 // expected-note{{possibly intended match does not satisfy same-type requirement}}
 }
 
-// FIXME: this compiles and prints Conform1() !?!
-func foo<Y: Bounded>(y: Y) {
-    print(y.x.t)
+protocol Extra {}
+extension Conform1: Extra {}
+
+protocol Conformance {
+    associatedtype X where X: SimpleWhere, X.T: Extra // expected-note{{note the type 'Conform2' (aka 'Self.X.T') is required to conform to 'Extra'
 }
-foo(y: Bar2())
 
+struct Baz: Conformance {
+    typealias X = Foo
+}
 
-
-
+struct Baz2: Conformance { // expected-error{{type 'Baz2' does not conform to protocol 'Conformance'}}
+    typealias X = Foo2 // expected-note{{possibly intended match does not satisfy conformance requirement}}
+}

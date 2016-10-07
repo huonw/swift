@@ -85,14 +85,14 @@ extension Foo: SingleProtocol2 {
 }
 
 struct Bar: SingleProtocol1, SingleProtocol2 {
-    var a = 0
-    var b = ""
-    var c = ""
-    var d = 0
-    typealias A = Int
-    typealias B = String
-    typealias C = String
-    typealias D = Int
+    var a = ""
+    var b = 0
+    var c = 0
+    var d = ""
+    typealias A = String
+    typealias B = Int
+    typealias C = Int
+    typealias D = String
 }
 
 struct Baz: SingleProtocol1 {
