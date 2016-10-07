@@ -4113,6 +4113,9 @@ void ConformanceChecker::addUsedConformances(ProtocolConformance *conformance) {
 bool ConformanceChecker::checkAssociatedTypeWhereClauseRequirements(
     AssociatedTypeDecl *assocType) {
   // FIXME: nothing checks X.InvalidAssocType
+  //
+  // FIXME: the errors point to the extension/conformance declaration and the
+  // associated type declaration, but not the witness declaration.
 
   auto *whereClause = assocType->getTrailingWhereClause();
   if (!whereClause)
@@ -4172,6 +4175,8 @@ bool ConformanceChecker::checkAssociatedTypeWhereClauseRequirements(
           diagnoseOrDefer(
               assocType, true,
               [&](TypeChecker &tc, NormalProtocolConformance *conformance) {
+                // FIXME: this should probably point to the witness declaration
+                // not the associated type one
                 tc.diagnose(assocType,
                             diag::protocol_witness_unsatisfied_requirement,
                             false);
@@ -4207,6 +4212,8 @@ bool ConformanceChecker::checkAssociatedTypeWhereClauseRequirements(
         diagnoseOrDefer(
             assocType, true,
             [&](TypeChecker &tc, NormalProtocolConformance *conformance) {
+              // FIXME: this should probably point to the witness declaration
+              // not the associated type one
               tc.diagnose(assocType,
                           diag::protocol_witness_unsatisfied_requirement, true);
 
