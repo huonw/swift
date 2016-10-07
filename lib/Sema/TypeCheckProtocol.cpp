@@ -1751,6 +1751,8 @@ namespace {
 
     void addUsedConformances(ProtocolConformance *conformance);
 
+    bool checkAssociatedTypeSameTypeRequirements(AssociatedTypeDecl *assocType);
+
   public:
     /// Emit any diagnostics that have been delayed.
     void emitDelayedDiags();
@@ -3275,8 +3277,18 @@ void ConformanceChecker::resolveTypeWitnesses() {
   }
 
   // If we resolved everything, we're done.
-  if (unresolvedAssocTypes.empty())
+  if (unresolvedAssocTypes.empty()) {
+    for (auto member : Proto->getMembers()) {
+      auto assocType = dyn_cast<AssociatedTypeDecl>(member);
+      if (!assocType)
+        continue;
+
+      if (checkAssociatedTypeSameTypeRequirements(assocType)) {
+        // FIXME: handle errors?
+      }
+    }
     return;
+  }
 
   // Infer type witnesses from value witnesses.
   auto inferred = inferTypeWitnessesViaValueWitnesses(unresolvedAssocTypes);
@@ -3755,6 +3767,18 @@ void ConformanceChecker::resolveTypeWitnesses() {
       recordTypeWitness(assocType, typeWitnesses[assocType].first, nullptr, true);
     }
 
+    // walk any `where` clauses on associated types to make sure the same-type
+    // requirements are OK.
+    for (auto member : Proto->getMembers()) {
+      auto *assocType = dyn_cast<AssociatedTypeDecl>(member);
+      if (!assocType)
+        continue;
+
+      if (checkAssociatedTypeSameTypeRequirements(assocType)) {
+        // FIXME: handle errors?
+      }
+    }
+
     return;
   }
 
@@ -4083,6 +4107,63 @@ void ConformanceChecker::addUsedConformances(ProtocolConformance *conformance) {
 
     return false;
   });
+}
+
+bool ConformanceChecker::checkAssociatedTypeSameTypeRequirements(
+    AssociatedTypeDecl *assocType) {
+  // FIXME: doesn't handle `where X.T: Prot`.
+  // FIXME: doesn't handle extra conformance requirements making new same-type
+  // constraints valid (i.e. `where X.T: HasAssocTypeBar, X.T.Bar == Int`).
+
+  auto *whereClause = assocType->getTrailingWhereClause();
+  if (!whereClause)
+    return true;
+
+  for (const auto &req : whereClause->getRequirements()) {
+    assert(!req.isInvalid() && "invalid requirement reached the type checker");
+    switch (req.getKind()) {
+    case RequirementReprKind::TypeConstraint:
+      continue;
+    case RequirementReprKind::SameType:
+      break;
+    }
+
+    auto Proto = Conformance->getProtocol();
+    auto genericSelfTy = Proto->getSelfInterfaceType();
+    auto concreteSelfTy = Conformance->getType();
+    auto *module = Conformance->getDeclContext()->getParentModule();
+    TypeSubstitutionMap substitutions;
+    substitutions[genericSelfTy->getCanonicalType().getPointer()] =
+        concreteSelfTy;
+
+    auto firstTy = req.getFirstType();
+    auto concreteFirstTy = firstTy.subst(module, substitutions, SubstOptions());
+    assert(concreteFirstTy &&
+           "Substituted Self type was already checked to be valid but failed");
+    concreteFirstTy = concreteFirstTy->getCanonicalType();
+
+    auto secondTy = req.getSecondType();
+    auto concreteSecondTy =
+        secondTy.subst(module, substitutions, SubstOptions());
+    assert(concreteSecondTy &&
+           "Substituted Self type was already checked to be valid but failed");
+    concreteSecondTy = concreteSecondTy->getCanonicalType();
+
+    if (!concreteFirstTy->isEqual(concreteSecondTy)) {
+      diagnoseOrDefer(
+          assocType, true,
+          [&](TypeChecker &tc, NormalProtocolConformance *conformance) {
+            tc.diagnose(assocType,
+                        diag::protocol_witness_unsatisfied_requirement,
+                        req.getKind() == RequirementReprKind::SameType);
+            // more info about the failure.
+            tc.diagnose(req.getEqualLoc(),
+                        diag::protocol_witness_unsatisfied_same_type,
+                        concreteFirstTy, firstTy, concreteSecondTy, secondTy);
+          });
+    }
+  }
+  return true;
 }
 
 #pragma mark Protocol conformance checking

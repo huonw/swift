@@ -1460,6 +1460,13 @@ NOTE(protocol_witness_nonconform_type,none,
      "possibly intended match %0 does not "
      "%select{inherit from|conform to}2 %1", (Type, Type, bool))
 
+NOTE(protocol_witness_unsatisfied_requirement,none,
+     "possibly intended match does not satisfy "
+     "%select{conformance|same-type}0 requirement", (bool))
+NOTE(protocol_witness_unsatisfied_same_type,none,
+     "the types %0 (aka %1) and %2 (aka %3) are required to be equivalent",
+     (Type, Type, Type, Type))
+
 NOTE(protocol_requirement_here,none,
      "requirement %0 declared here", (DeclName))
 NOTE(protocol_conformance_here,none,
