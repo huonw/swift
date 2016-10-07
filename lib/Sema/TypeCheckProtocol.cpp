@@ -4146,30 +4146,42 @@ bool ConformanceChecker::checkAssociatedTypeWhereClauseRequirements(
 
       bool conforms;
       bool conformanceReq;
-      if (auto *protConstraint = constraint->getAs<ProtocolType>()) {
-        conformanceReq = true;
-        conforms =
-            TC.conformsToProtocol(concreteSubjectTy, protConstraint->getDecl(),
-                                  DC, ConformanceCheckOptions());
 
+      // A conformance could be just `T: X` or it could be fancy like `T: X &
+      // Y`, and we need to handle both cases.
+      ArrayRef<Type> constraints;
+      if (auto *protocolComposition =
+              constraint->getAs<ProtocolCompositionType>()) {
+        constraints = protocolComposition->getProtocols();
       } else {
-        conformanceReq = false;
-        llvm_unreachable("not handled yet");
+        constraints = constraint;
       }
 
-      if (!conforms) {
-        diagnoseOrDefer(
-            assocType, true,
-            [&](TypeChecker &tc, NormalProtocolConformance *conformance) {
-              tc.diagnose(assocType,
-                          diag::protocol_witness_unsatisfied_requirement,
-                          false);
+      for (auto singleConstraint : constraints) {
+        if (auto *protConstraint = singleConstraint->getAs<ProtocolType>()) {
+          conformanceReq = true;
+          conforms = TC.conformsToProtocol(concreteSubjectTy,
+                                           protConstraint->getDecl(), DC,
+                                           ConformanceCheckOptions());
+        } else {
+          conformanceReq = false;
+          llvm_unreachable("not handled yet");
+        }
 
-              tc.diagnose(req.getColonLoc(),
-                          diag::protocol_witness_unsatisfied_conforms,
-                          concreteSubjectTy, subjectTy, conformanceReq,
-                          constraint);
-            });
+        if (!conforms) {
+          diagnoseOrDefer(
+              assocType, true,
+              [&](TypeChecker &tc, NormalProtocolConformance *conformance) {
+                tc.diagnose(assocType,
+                            diag::protocol_witness_unsatisfied_requirement,
+                            false);
+
+                tc.diagnose(req.getColonLoc(),
+                            diag::protocol_witness_unsatisfied_conforms,
+                            concreteSubjectTy, subjectTy, conformanceReq,
+                            constraint);
+              });
+        }
       }
 
       break;
