@@ -22,8 +22,8 @@
 #include "swift/AST/ClangNode.h"
 #include "swift/AST/ConcreteDeclRef.h"
 #include "swift/AST/DefaultArgumentKind.h"
-#include "swift/AST/GenericSignature.h"
 #include "swift/AST/GenericEnvironment.h"
+#include "swift/AST/GenericSignature.h"
 #include "swift/AST/LazyResolver.h"
 #include "swift/AST/TypeAlignments.h"
 #include "swift/AST/Witness.h"
@@ -1459,7 +1459,9 @@ public:
   }
 
   /// Retrieve the generic signature for this extension.
-  GenericSignature *getGenericSignature() const { return GenericEnv ? GenericEnv->getGenericSignature() : nullptr; }
+  GenericSignature *getGenericSignature() const {
+    return GenericEnv ? GenericEnv->getGenericSignature() : nullptr;
+  }
 
   /// Retrieve the generic context for this extension.
   GenericEnvironment *getGenericEnvironment() const { return GenericEnv; }
@@ -4540,15 +4542,14 @@ protected:
 
   ImportAsMemberStatus IAMStatus;
 
-  AbstractFunctionDecl(DeclKind Kind, DeclContext *Parent,
-                       DeclName Name, SourceLoc NameLoc,
-                       bool Throws, SourceLoc ThrowsLoc,
+  AbstractFunctionDecl(DeclKind Kind, DeclContext *Parent, DeclName Name,
+                       SourceLoc NameLoc, bool Throws, SourceLoc ThrowsLoc,
                        unsigned NumParameterLists,
                        GenericParamList *GenericParams)
       : ValueDecl(Kind, Parent, Name, NameLoc),
         DeclContext(DeclContextKind::AbstractFunctionDecl, Parent),
-        Body(nullptr), GenericParams(nullptr),
-        GenericEnv(nullptr), ThrowsLoc(ThrowsLoc) {
+        Body(nullptr), GenericParams(nullptr), GenericEnv(nullptr),
+        ThrowsLoc(ThrowsLoc) {
     setBodyKind(BodyKind::None);
     setGenericParams(GenericParams);
     AbstractFunctionDeclBits.NumParameterLists = NumParameterLists;
