@@ -861,7 +861,7 @@ public:
   void emitSILFunction(SILFunction *f);
   void emitSILWitnessTable(SILWitnessTable *wt);
   void emitSILStaticInitializers();
-  llvm::Constant *emitFixedTypeLayout(CanType t, const FixedTypeInfo &ti);
+  llvm::Constant *emitFixedTypeLayout(GenericEnvironment *env, CanType t, const FixedTypeInfo &ti);
 
   void emitNestedTypeDecls(DeclRange members);
   void emitClangDecl(const clang::Decl *decl);
@@ -869,9 +869,10 @@ public:
   void finishEmitAfterTopLevel();
 
   llvm::FunctionType *getFunctionType(CanSILFunctionType type,
+                                      GenericEnvironment *env,
                                       llvm::AttributeSet &attrs,
                                       ForeignFunctionInfo *foreignInfo=nullptr);
-  ForeignFunctionInfo getForeignFunctionInfo(CanSILFunctionType type);
+  ForeignFunctionInfo getForeignFunctionInfo(CanSILFunctionType type, GenericEnvironment *env);
 
   llvm::Constant *getSize(Size size);
 

@@ -32,11 +32,12 @@ using namespace swift;
 using namespace irgen;
 
 IRGenFunction::IRGenFunction(IRGenModule &IGM, llvm::Function *Fn,
+                             GenericEnvironment *GenericEnv,
                              const SILDebugScope *DbgScope,
                              Optional<SILLocation> DbgLoc)
     : IGM(IGM), Builder(IGM.getLLVMContext(),
                         IGM.DebugInfo && !IGM.Context.LangOpts.DebuggerSupport),
-      CurFn(Fn), DbgScope(DbgScope) {
+      GenericEnv(GenericEnv), CurFn(Fn), DbgScope(DbgScope) {
 
   // Make sure the instructions in this function are attached its debug scope.
   if (IGM.DebugInfo) {

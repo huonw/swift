@@ -93,6 +93,7 @@ namespace irgen {
   /// the given generics clause.
   void expandPolymorphicSignature(IRGenModule &IGM,
                                   CanSILFunctionType type,
+                                  GenericEnvironment *env,
                                   SmallVectorImpl<llvm::Type*> &types);
 
   /// Return the number of trailing arguments necessary for calling a
@@ -234,6 +235,7 @@ namespace irgen {
                             const MetadataPath &path)>;
 
   void enumerateGenericParamFulfillments(IRGenModule &IGM,
+    GenericEnvironment *env,
     CanSILFunctionType fnType,
     GenericParamFulfillmentCallback callback);
 

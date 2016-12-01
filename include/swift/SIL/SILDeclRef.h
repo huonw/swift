@@ -214,6 +214,10 @@ struct SILDeclRef {
     return loc.is<ValueDecl *>() && isa<FuncDecl>(getDecl());
   }
 
+  DeclContext *getDeclContext() const {
+    return hasDecl() ? getDecl()->getDeclContext() : getAbstractClosureExpr();
+  }
+
   ValueDecl *getDecl() const { return loc.get<ValueDecl *>(); }
   AbstractClosureExpr *getAbstractClosureExpr() const {
     return loc.dyn_cast<AbstractClosureExpr *>();

@@ -82,6 +82,7 @@ protected:
   CanSILFunctionType FnType;
 
   CanGenericSignature Generics;
+  GenericEnvironment *Env;
 
   std::vector<MetadataSource> Sources;
 
@@ -92,7 +93,8 @@ protected:
   }
 
 public:
-  PolymorphicConvention(IRGenModule &IGM, CanSILFunctionType fnType);
+  PolymorphicConvention(IRGenModule &IGM, CanSILFunctionType fnType,
+                        GenericEnvironment *Env);
 
   ArrayRef<MetadataSource> getSources() const { return Sources; }
 
@@ -139,8 +141,9 @@ private:
 } // end anonymous namespace
 
 PolymorphicConvention::PolymorphicConvention(IRGenModule &IGM,
-                                             CanSILFunctionType fnType)
-  : IGM(IGM), M(*IGM.getSwiftModule()), FnType(fnType) {
+                                             CanSILFunctionType fnType,
+                                             GenericEnvironment *env)
+  : IGM(IGM), M(*IGM.getSwiftModule()), FnType(fnType), Env(env) {
   initGenerics();
 
   auto rep = fnType->getRepresentation();
@@ -397,9 +400,10 @@ PolymorphicConvention::getFulfillmentForTypeMetadata(CanType type) const {
 }
 
 void irgen::enumerateGenericParamFulfillments(IRGenModule &IGM,
+                                  GenericEnvironment *env,
                                   CanSILFunctionType fnType,
                                   GenericParamFulfillmentCallback callback) {
-  PolymorphicConvention convention(IGM, fnType);
+  PolymorphicConvention convention(IGM, fnType, env);
 
   // Check if any requirements were fulfilled by metadata stored inside a
   // captured value.
@@ -454,7 +458,7 @@ private:
 
 EmitPolymorphicParameters::EmitPolymorphicParameters(IRGenFunction &IGF,
                           SILFunction &Fn)
-  : PolymorphicConvention(IGF.IGM, Fn.getLoweredFunctionType()),
+  : PolymorphicConvention(IGF.IGM, Fn.getLoweredFunctionType(), IGF.GenericEnv),
     IGF(IGF), Fn(Fn) {}
 
 
@@ -1184,7 +1188,7 @@ public:
       assert(!associate->hasTypeParameter());
 
       llvm::Constant *metadataAccessFunction =
-        getAssociatedTypeMetadataAccessFunction(requirement, associate);
+        getAssociatedTypeMetadataAccessFunction(requirement, Conformance.getGenericEnvironment(), associate);
       Table.push_back(metadataAccessFunction);
 
       // FIXME: Add static witness tables for type conformances.
@@ -1210,7 +1214,7 @@ public:
         SILEntries = SILEntries.slice(1);
 
         llvm::Constant *wtableAccessFunction = 
-          getAssociatedTypeWitnessTableAccessFunction(requirement, associate,
+          getAssociatedTypeWitnessTableAccessFunction(requirement, Conformance.getGenericEnvironment(), associate,
                                             protocol, associatedConformance);
         Table.push_back(wtableAccessFunction);
       }
@@ -1221,10 +1225,12 @@ public:
 
     llvm::Constant *
     getAssociatedTypeMetadataAccessFunction(AssociatedTypeDecl *requirement,
+                                            GenericEnvironment *env,
                                             CanType associatedType);
 
     llvm::Constant *
     getAssociatedTypeWitnessTableAccessFunction(AssociatedTypeDecl *requirement,
+                                                GenericEnvironment *env,
                                                 CanType associatedType,
                                                 ProtocolDecl *protocol,
                                         ProtocolConformanceRef conformance);
@@ -1294,6 +1300,7 @@ void WitnessTableBuilder::build() {
 /// for an associated type.
 llvm::Constant *WitnessTableBuilder::
 getAssociatedTypeMetadataAccessFunction(AssociatedTypeDecl *requirement,
+                                        GenericEnvironment *env,
                                         CanType associatedType) {
   // If the associated type is non-dependent, we can use an ordinary
   // metadata access function.  We'll just end up passing extra arguments.
@@ -1306,7 +1313,7 @@ getAssociatedTypeMetadataAccessFunction(AssociatedTypeDecl *requirement,
     IGM.getAddrOfAssociatedTypeMetadataAccessFunction(&Conformance,
                                                       requirement);
 
-  IRGenFunction IGF(IGM, accessor);
+  IRGenFunction IGF(IGM, accessor, env);
   if (IGM.DebugInfo)
     IGM.DebugInfo->emitArtificialFunction(IGF, accessor);
 
@@ -1387,6 +1394,7 @@ getOrCreateWitnessTableAccessFunction(IRGenModule &IGM, CanType type,
 
 llvm::Constant *WitnessTableBuilder::
 getAssociatedTypeWitnessTableAccessFunction(AssociatedTypeDecl *requirement,
+                                            GenericEnvironment *env,
                                             CanType associatedType,
                                             ProtocolDecl *associatedProtocol,
                                 ProtocolConformanceRef associatedConformance) {
@@ -1403,7 +1411,7 @@ getAssociatedTypeWitnessTableAccessFunction(AssociatedTypeDecl *requirement,
                                                           requirement,
                                                           associatedProtocol);
 
-  IRGenFunction IGF(IGM, accessor);
+  IRGenFunction IGF(IGM, accessor, env);
   if (IGM.DebugInfo)
     IGM.DebugInfo->emitArtificialFunction(IGF, accessor);
 
@@ -1538,7 +1546,7 @@ void WitnessTableBuilder::buildAccessFunction(llvm::Constant *wtable) {
   llvm::Function *fn =
     IGM.getAddrOfWitnessTableAccessFunction(&Conformance, ForDefinition);
 
-  IRGenFunction IGF(IGM, fn);
+  IRGenFunction IGF(IGM, fn, nullptr);
   if (IGM.DebugInfo)
     IGM.DebugInfo->emitArtificialFunction(IGF, fn);
 
@@ -1633,7 +1641,7 @@ void WitnessTableBuilder::buildAccessFunction(llvm::Constant *wtable) {
 llvm::Constant *WitnessTableBuilder::buildInstantiationFunction() {
   llvm::Function *fn =
     IGM.getAddrOfGenericWitnessTableInstantiationFunction(&Conformance);
-  IRGenFunction IGF(IGM, fn);
+  IRGenFunction IGF(IGM, fn, nullptr);
   if (IGM.DebugInfo)
     IGM.DebugInfo->emitArtificialFunction(IGF, fn);
 
@@ -2378,7 +2386,7 @@ namespace {
   public:
     EmitPolymorphicArguments(IRGenFunction &IGF,
                              CanSILFunctionType polyFn)
-      : PolymorphicConvention(IGF.IGM, polyFn), IGF(IGF) {}
+      : PolymorphicConvention(IGF.IGM, polyFn, IGF.GenericEnv), IGF(IGF) {}
 
     void emit(CanSILFunctionType substFnType, ArrayRef<Substitution> subs,
               WitnessMetadata *witnessMetadata, Explosion &out);
@@ -2466,6 +2474,7 @@ void EmitPolymorphicArguments::emit(CanSILFunctionType substFnType,
 
 NecessaryBindings
 NecessaryBindings::forFunctionInvocations(IRGenModule &IGM,
+                                          GenericEnvironment *env,
                                           CanSILFunctionType origType,
                                           CanSILFunctionType substType,
                                           ArrayRef<Substitution> subs) {
@@ -2476,7 +2485,7 @@ NecessaryBindings::forFunctionInvocations(IRGenModule &IGM,
     return bindings;
 
   // Figure out what we're actually required to pass:
-  PolymorphicConvention convention(IGM, origType);
+  PolymorphicConvention convention(IGM, origType, env);
 
   //  - unfulfilled requirements
   convention.enumerateUnfulfilledRequirements(
@@ -2569,8 +2578,9 @@ GenericTypeRequirements::GenericTypeRequirements(IRGenModule &IGM,
                                 IGM.Context);
   }();
 
+  auto *env = typeDecl->getGenericEnvironmentOfContext();
   // Figure out what we're actually still required to pass 
-  PolymorphicConvention convention(IGM, fnType);
+  PolymorphicConvention convention(IGM, fnType, env);
   convention.enumerateUnfulfilledRequirements([&](GenericRequirement reqt) {
     assert(generics->isCanonicalTypeInContext(reqt.TypeParameter,
                                               *IGM.getSwiftModule()));
@@ -2734,8 +2744,8 @@ namespace {
   /// A class for expanding a polymorphic signature.
   class ExpandPolymorphicSignature : public PolymorphicConvention {
   public:
-    ExpandPolymorphicSignature(IRGenModule &IGM, CanSILFunctionType fn)
-      : PolymorphicConvention(IGM, fn) {}
+    ExpandPolymorphicSignature(IRGenModule &IGM, CanSILFunctionType fn, GenericEnvironment *env)
+      : PolymorphicConvention(IGM, fn, env) {}
 
     void expand(SmallVectorImpl<llvm::Type*> &out) {
       for (auto &source : getSources())
@@ -2768,8 +2778,9 @@ namespace {
 /// Given a generic signature, add the argument types required in order to call it.
 void irgen::expandPolymorphicSignature(IRGenModule &IGM,
                                        CanSILFunctionType polyFn,
+                                       GenericEnvironment *env,
                                        SmallVectorImpl<llvm::Type*> &out) {
-  ExpandPolymorphicSignature(IGM, polyFn).expand(out);
+  ExpandPolymorphicSignature(IGM, polyFn, env).expand(out);
 }
 
 void irgen::expandTrailingWitnessSignature(IRGenModule &IGM,

@@ -682,7 +682,8 @@ public:
     auto SubstMap =
       OrigCalleeType->getGenericSignature()->getSubstitutionMap(Subs);
 
-    enumerateGenericParamFulfillments(IGM, OrigCalleeType,
+    enumerateGenericParamFulfillments(IGM, Caller.getGenericEnvironment(),
+        OrigCalleeType,
         [&](CanType GenericParam,
             const irgen::MetadataSource &Source,
             const MetadataPath &Path) {

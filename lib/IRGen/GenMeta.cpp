@@ -1068,7 +1068,7 @@ void irgen::emitLazyCacheAccessFunction(IRGenModule &IGM,
   // to reason about any side effects or stores it might perform.
   accessor->setDoesNotAccessMemory();
 
-  IRGenFunction IGF(IGM, accessor);
+  IRGenFunction IGF(IGM, accessor, nullptr);
   if (IGM.DebugInfo)
     IGM.DebugInfo->emitArtificialFunction(IGF, accessor);
 
@@ -1217,7 +1217,7 @@ createInPlaceMetadataInitializationFunction(IRGenModule &IGM,
   fn->setAttributes(IGM.constructInitialAttributes());
   
   // Set up the function.
-  IRGenFunction IGF(IGM, fn);
+  IRGenFunction IGF(IGM, fn, nullptr);
   if (IGM.DebugInfo)
     IGM.DebugInfo->emitArtificialFunction(IGF, fn);
 
@@ -1846,7 +1846,7 @@ namespace {
       // If the type is fixed-layout, emit a copy of its layout.
       if (auto fixed = dyn_cast<FixedTypeInfo>(&ti)) {
 
-        return IGF.IGM.emitFixedTypeLayout(t, *fixed);
+        return IGF.IGM.emitFixedTypeLayout(IGF.GenericEnv, t, *fixed);
       }
 
       return emitFromTypeMetadata(t);
@@ -2740,7 +2740,7 @@ irgen::emitFieldTypeAccessor(IRGenModule &IGM,
                              llvm::Function *fn,
                              ArrayRef<FieldTypeInfo> fieldTypes)
 {
-  IRGenFunction IGF(IGM, fn);
+  IRGenFunction IGF(IGM, fn, type->getGenericEnvironment());
   if (IGM.DebugInfo)
     IGM.DebugInfo->emitArtificialFunction(IGF, fn);
 
@@ -2955,7 +2955,7 @@ namespace {
                                            &IGM.Module);
       f->setAttributes(IGM.constructInitialAttributes());
       
-      IRGenFunction IGF(IGM, f);
+      IRGenFunction IGF(IGM, f, Target->getGenericEnvironment());
 
       // Skip instrumentation when building for TSan to avoid false positives.
       // The synchronization for this happens in the Runtime and we do not see it.
@@ -4697,7 +4697,7 @@ llvm::Value *irgen::emitVirtualMethodValue(IRGenFunction &IGF,
   // Use the type of the method we were type-checked against, not the
   // type of the overridden method.
   llvm::AttributeSet attrs;
-  auto fnTy = IGF.IGM.getFunctionType(methodType, attrs)->getPointerTo();
+  auto fnTy = IGF.IGM.getFunctionType(methodType, IGF.GenericEnv, attrs)->getPointerTo();
 
   auto declaringClass = cast<ClassDecl>(overridden.getDecl()->getDeclContext());
   auto index = FindClassMethodIndex(IGF.IGM, declaringClass, overridden)
@@ -4903,8 +4903,9 @@ namespace {
     }
 
     void addValueWitnessTable() {
+      auto env =  this->Target->getGenericEnvironment();
       auto type = this->Target->getDeclaredType()->getCanonicalType();
-      addWord(emitValueWitnessTable(IGM, type));
+      addWord(emitValueWitnessTable(IGM, env, type));
     }
 
     void createMetadataAccessFunction() {
@@ -4927,7 +4928,7 @@ namespace {
     if (dependent)
       return llvm::ConstantPointerNull::get(IGM.Int8PtrTy);
     else
-      return emitValueWitnessTable(IGM, unboundType);
+      return emitValueWitnessTable(IGM, decl->getGenericEnvironment(), unboundType);
   }
   
   /// A builder for metadata templates.
@@ -4970,7 +4971,8 @@ namespace {
     void addDependentValueWitnessTablePattern() {
       SmallVector<llvm::Constant*, 20> pattern;
       emitDependentValueWitnessTablePattern(IGM,
-                        Target->getDeclaredTypeOfContext()->getCanonicalType(),
+                                            Target->getGenericEnvironment(),
+                                            Target->getDeclaredTypeOfContext()->getCanonicalType(),
                                             pattern);
       for (auto witness: pattern)
         addWord(witness);
@@ -5082,8 +5084,9 @@ public:
     : EnumMetadataBuilderBase(IGM, theEnum, relativeAddressBase) {}
   
   void addValueWitnessTable() {
-    auto type = Target->getDeclaredType()->getCanonicalType();
-    addWord(emitValueWitnessTable(IGM, type));
+    auto env =  this->Target->getGenericEnvironment();
+    auto type = this->Target->getDeclaredType()->getCanonicalType();
+    addWord(emitValueWitnessTable(IGM, env, type));
   }
   
   void addPayloadSize() {
@@ -5148,6 +5151,7 @@ public:
   void addDependentValueWitnessTablePattern() {
     SmallVector<llvm::Constant*, 20> pattern;
     emitDependentValueWitnessTablePattern(IGM,
+                        Target->getGenericEnvironment(),
                         Target->getDeclaredTypeOfContext()->getCanonicalType(),
                                           pattern);
     for (auto witness: pattern)
@@ -5328,7 +5332,7 @@ namespace {
       fn->setAttributes(IGM.constructInitialAttributes());
       
       // Set up the function.
-      IRGenFunction IGF(IGM, fn);
+      IRGenFunction IGF(IGM, fn, nullptr);
       if (IGM.DebugInfo)
         IGM.DebugInfo->emitArtificialFunction(IGF, fn);
 
@@ -5420,8 +5424,9 @@ namespace {
     }
 
     void addValueWitnessTable() {
+      auto env =  this->Target->getGenericEnvironment();
       auto type = this->Target->getDeclaredType()->getCanonicalType();
-      addWord(emitValueWitnessTable(IGM, type));
+      addWord(emitValueWitnessTable(IGM, env, type));
     }
 
     void flagUnfilledParent() {
@@ -5466,8 +5471,9 @@ namespace {
     }
 
     void addValueWitnessTable() {
+      auto env =  this->Target->getGenericEnvironment();
       auto type = this->Target->getDeclaredType()->getCanonicalType();
-      addWord(emitValueWitnessTable(IGM, type));
+      addWord(emitValueWitnessTable(IGM, env, type));
     }
     
     void addPayloadSize() const {

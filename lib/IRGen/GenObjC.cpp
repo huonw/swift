@@ -653,7 +653,7 @@ CallEmission irgen::prepareObjCMethodRootCall(IRGenFunction &IGF,
 
   ForeignFunctionInfo foreignInfo;
   llvm::AttributeSet attrs;
-  auto fnTy = IGF.IGM.getFunctionType(origFnType, attrs, &foreignInfo);
+  auto fnTy = IGF.IGM.getFunctionType(origFnType, IGF.GenericEnv, attrs, &foreignInfo);
   bool indirectResult = foreignInfo.ClangInfo->getReturnInfo().isIndirect();
   if (kind != ObjCMessageKind::Normal)
     fnTy = getMsgSendSuperTy(IGF.IGM, fnTy, indirectResult);
@@ -758,9 +758,10 @@ static llvm::Function *emitObjCPartialApplicationForwarder(IRGenModule &IGM,
  
   assert(resultType->getRepresentation()
            == SILFunctionType::Representation::Thick);
- 
+
+  auto env = method.getMethod().getDeclContext()->getGenericEnvironmentOfContext();
   llvm::AttributeSet attrs;
-  llvm::FunctionType *fwdTy = IGM.getFunctionType(resultType, attrs);
+  llvm::FunctionType *fwdTy = IGM.getFunctionType(resultType, env, attrs);
   // FIXME: Give the thunk a real name.
   // FIXME: Maybe cache the thunk by function and closure types?
   llvm::Function *fwd =
@@ -774,7 +775,7 @@ static llvm::Function *emitObjCPartialApplicationForwarder(IRGenModule &IGM,
                         llvm::AttributeSet::FunctionIndex, initialAttrs);
   fwd->setAttributes(updatedAttrs);
   
-  IRGenFunction subIGF(IGM, fwd);
+  IRGenFunction subIGF(IGM, fwd, env);
   if (IGM.DebugInfo)
     IGM.DebugInfo->emitArtificialFunction(subIGF, fwd);
   

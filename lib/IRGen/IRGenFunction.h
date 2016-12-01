@@ -78,6 +78,7 @@ class IRGenFunction {
 public:
   IRGenModule &IGM;
   IRBuilder Builder;
+  GenericEnvironment *GenericEnv;
 
   llvm::Function *CurFn;
   ModuleDecl *getSwiftModule() const;
@@ -85,6 +86,7 @@ public:
   Lowering::TypeConverter &getSILTypes() const;
 
   IRGenFunction(IRGenModule &IGM, llvm::Function *fn,
+                GenericEnvironment *env,
                 const SILDebugScope *DbgScope = nullptr,
                 Optional<SILLocation> DbgLoc = None);
   ~IRGenFunction();

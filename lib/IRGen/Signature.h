@@ -57,7 +57,8 @@ public:
     return Type != nullptr;
   }
 
-  static Signature get(IRGenModule &IGM, CanSILFunctionType formalType);
+  static Signature get(IRGenModule &IGM, CanSILFunctionType formalType,
+                       GenericEnvironment *env);
 
   llvm::FunctionType *getType() const {
     assert(isValid());

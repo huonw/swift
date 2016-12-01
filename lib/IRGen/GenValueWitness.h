@@ -38,11 +38,12 @@ namespace irgen {
 
   /// Emit a value-witness table for the given type, which is assumed
   /// to be non-dependent.
-  llvm::Constant *emitValueWitnessTable(IRGenModule &IGM, CanType type);
+  llvm::Constant *emitValueWitnessTable(IRGenModule &IGM, GenericEnvironment *env, CanType type);
 
   /// Emit the elements of a dependent value witness table template into a
   /// vector.
   void emitDependentValueWitnessTablePattern(IRGenModule &IGM,
+                                    GenericEnvironment *env,
                                     CanType abstractType,
                                     SmallVectorImpl<llvm::Constant*> &fields);
 

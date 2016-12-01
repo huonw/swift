@@ -290,6 +290,7 @@ llvm::Value *irgen::emitReferenceToObjCProtocol(IRGenFunction &IGF,
 ///
 /// The value is NULL if the cast failed.
 static llvm::Function *emitExistentialScalarCastFn(IRGenModule &IGM,
+                                                   GenericEnvironment *env,
                                                    unsigned numProtocols,
                                                    CheckedCastMode mode,
                                                    bool checkClassConstraint) {
@@ -335,7 +336,7 @@ static llvm::Function *emitExistentialScalarCastFn(IRGenModule &IGM,
                                    llvm::Twine(name), IGM.getModule());
   fn->setAttributes(IGM.constructInitialAttributes());
   
-  IRGenFunction IGF(IGM, fn);
+  IRGenFunction IGF(IGM, fn, env);
   if (IGM.DebugInfo)
     IGM.DebugInfo->emitArtificialFunction(IGF, fn);
   Explosion args = IGF.collectParameters();
@@ -659,7 +660,7 @@ void irgen::emitScalarExistentialDowncast(IRGenFunction &IGF,
   }
 
   // Look up witness tables for the protocols that need them.
-  auto fn = emitExistentialScalarCastFn(IGF.IGM, witnessTableProtos.size(),
+  auto fn = emitExistentialScalarCastFn(IGF.IGM, IGF.GenericEnv, witnessTableProtos.size(),
                                         mode, checkClassConstraint);
 
   llvm::SmallVector<llvm::Value *, 4> args;
