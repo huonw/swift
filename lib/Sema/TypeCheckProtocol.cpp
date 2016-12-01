@@ -4140,9 +4140,9 @@ bool ConformanceChecker::checkAssociatedTypeWhereClauseRequirements(
       auto subjectTy = req.getSubject();
       auto concreteSubjectTy =
           subjectTy.subst(module, substitutions, SubstOptions());
-      assert(
-          concreteSubjectTy &&
-          "Substituted Self type was already checked to be valid but failed");
+      if (!concreteSubjectTy)
+        return true;
+
       concreteSubjectTy = concreteSubjectTy->getCanonicalType();
 
       auto constraint = req.getConstraint();
@@ -4227,7 +4227,7 @@ bool ConformanceChecker::checkAssociatedTypeWhereClauseRequirements(
     }
     }
   }
-  return true;
+  return false;
 }
 
 #pragma mark Protocol conformance checking
