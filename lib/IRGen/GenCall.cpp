@@ -229,6 +229,7 @@ void irgen::addExtendAttribute(IRGenModule &IGM,
 namespace {
   class SignatureExpansion {
     IRGenModule &IGM;
+    GenericEnvironment *GenericEnv;
     CanSILFunctionType FnType;
   public:
     SmallVector<llvm::Type*, 8> ParamIRTypes;
@@ -236,8 +237,8 @@ namespace {
     ForeignFunctionInfo ForeignInfo;
     bool CanUseSRet = true;
 
-    SignatureExpansion(IRGenModule &IGM, CanSILFunctionType fnType)
-      : IGM(IGM), FnType(fnType) {}
+    SignatureExpansion(IRGenModule &IGM, GenericEnvironment *genericEnv, CanSILFunctionType fnType)
+      : IGM(IGM), GenericEnv(genericEnv), FnType(fnType) {}
 
     llvm::Type *expandSignatureTypes();
 
@@ -943,7 +944,7 @@ void SignatureExpansion::expandParameters() {
 
   // Next, the generic signature.
   if (hasPolymorphicParameters(FnType))
-    expandPolymorphicSignature(IGM, FnType, ParamIRTypes);
+    expandPolymorphicSignature(IGM, FnType, GenericEnv, ParamIRTypes);
 
   // Context is next.
   if (hasSelfContext) {
@@ -1013,9 +1014,9 @@ llvm::Type *SignatureExpansion::expandSignatureTypes() {
   llvm_unreachable("bad abstract calling convention");
 }
 
-Signature Signature::get(IRGenModule &IGM, CanSILFunctionType formalType) {
+Signature Signature::get(IRGenModule &IGM, CanSILFunctionType formalType, GenericEnvironment *genericEnv) {
   GenericContextScope scope(IGM, formalType->getGenericSignature());
-  SignatureExpansion expansion(IGM, formalType);
+  SignatureExpansion expansion(IGM, genericEnv, formalType);
   llvm::Type *resultType = expansion.expandSignatureTypes();
 
   // Create the appropriate LLVM type.
@@ -1276,7 +1277,7 @@ void CallEmission::setFromCallee() {
   LastArgWritten = numArgs;
 
   auto fnType = CurCallee.getOrigFunctionType();
-  Attrs = Signature::get(IGF.IGM, fnType).getAttributes();
+  Attrs = Signature::get(IGF.IGM, fnType, IGF.GenericEnv).getAttributes();
 
   if (fnType->getRepresentation()
         == SILFunctionTypeRepresentation::WitnessMethod) {

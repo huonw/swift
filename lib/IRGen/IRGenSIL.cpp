@@ -988,7 +988,7 @@ llvm::Value *LoweredValue::getSingletonExplosion(IRGenFunction &IGF) const {
 IRGenSILFunction::IRGenSILFunction(IRGenModule &IGM,
                                    SILFunction *f)
   : IRGenFunction(IGM, IGM.getAddrOfSILFunction(f, ForDefinition),
-                  f->getDebugScope(), f->getLocation()),
+                  f->getGenericEnvironment(), f->getDebugScope(), f->getLocation()),
     CurSILFn(f)
 {}
 
@@ -1209,7 +1209,8 @@ static void emitEntryPointArgumentsCOrObjC(IRGenSILFunction &IGF,
                                            Explosion &params,
                                            CanSILFunctionType funcTy) {
   // First, lower the method type.
-  ForeignFunctionInfo foreignInfo = IGF.IGM.getForeignFunctionInfo(funcTy);
+  ForeignFunctionInfo foreignInfo = IGF.IGM.getForeignFunctionInfo(funcTy,
+                                                                   IGF.GenericEnv);
   assert(foreignInfo.ClangInfo);
   auto &FI = *foreignInfo.ClangInfo;
 
@@ -1561,7 +1562,8 @@ void IRGenSILFunction::visitFunctionRefInst(FunctionRefInst *i) {
   auto fn = i->getReferencedFunction();
 
   llvm::Function *fnptr = IGM.getAddrOfSILFunction(fn, NotForDefinition);
-  auto foreignInfo = IGM.getForeignFunctionInfo(fn->getLoweredFunctionType());
+  auto foreignInfo = IGM.getForeignFunctionInfo(fn->getLoweredFunctionType(),
+                                                fn->getGenericEnvironment());
   
   // Store the function constant and calling
   // convention as a StaticFunction so we can avoid bitcasting or thunking if
@@ -1805,7 +1807,8 @@ static llvm::Value *emitWitnessTableForLoweredCallee(IRGenSILFunction &IGF,
     auto substSelfType = subs[0].getReplacement()->getCanonicalType();
 
     llvm::Value *argMetadata = IGF.emitTypeMetadataRef(substSelfType);
-    wtable = emitWitnessTableRef(IGF, substSelfType, &argMetadata,
+    wtable = emitWitnessTableRef(IGF,
+                                 substSelfType, &argMetadata,
                                  conformance);
   } else {
     // Otherwise, we have no way of knowing the original protocol or
@@ -1832,7 +1835,7 @@ static CallEmission getCallEmissionForLoweredValue(IRGenSILFunction &IGF,
                                          Explosion &args) {
   llvm::Value *calleeFn, *calleeData;
   ForeignFunctionInfo foreignInfo;
-  
+
   switch (lv.kind) {
   case LoweredValue::Kind::StaticFunction:
     calleeFn = lv.getStaticFunction().getFunction();
@@ -1924,7 +1927,7 @@ static CallEmission getCallEmissionForLoweredValue(IRGenSILFunction &IGF,
     // Cast the callee pointer to the right function type.
     llvm::AttributeSet attrs;
     llvm::FunctionType *fnTy =
-      IGF.IGM.getFunctionType(origCalleeType, attrs, &foreignInfo);
+      IGF.IGM.getFunctionType(origCalleeType, IGF.GenericEnv, attrs, &foreignInfo);
     calleeFn = IGF.Builder.CreateBitCast(calleeFn, fnTy->getPointerTo());
     break;
   }

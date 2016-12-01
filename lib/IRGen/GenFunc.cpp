@@ -115,14 +115,14 @@ namespace {
   private:
     /// The SIL function type being represented.
     const CanSILFunctionType FormalType;
-    
+
     mutable Signature TheSignature;
     
   public:
     FuncSignatureInfo(CanSILFunctionType formalType)
       : FormalType(formalType) {}
     
-    Signature getSignature(IRGenModule &IGM) const;
+    Signature getSignature(IRGenModule &IGM, GenericEnvironment *env) const;
   };
 
   /// The @thin function type-info class.
@@ -591,13 +591,13 @@ const TypeInfo *TypeConverter::convertFunctionType(SILFunctionType *T) {
   llvm_unreachable("bad function type representation");
 }
 
-Signature FuncSignatureInfo::getSignature(IRGenModule &IGM) const {
+Signature FuncSignatureInfo::getSignature(IRGenModule &IGM, GenericEnvironment *env) const {
   // If it's already been filled in, we're done.
   if (TheSignature.isValid())
     return TheSignature;
 
   // Update the cache and return.
-  TheSignature = Signature::get(IGM, FormalType);
+  TheSignature = Signature::get(IGM, FormalType, env);
   assert(TheSignature.isValid());
   return TheSignature;
 }
@@ -623,22 +623,23 @@ getFuncSignatureInfoForLowered(IRGenModule &IGM, CanSILFunctionType type) {
 
 llvm::FunctionType *
 IRGenModule::getFunctionType(CanSILFunctionType type,
+                             GenericEnvironment *env,
                              llvm::AttributeSet &attrs,
                              ForeignFunctionInfo *foreignInfo) {
   auto &sigInfo = getFuncSignatureInfoForLowered(*this, type);
-  Signature sig = sigInfo.getSignature(*this);
+  Signature sig = sigInfo.getSignature(*this, env);
   attrs = sig.getAttributes();
   if (foreignInfo) *foreignInfo = sig.getForeignInfo();
   return sig.getType();
 }
 
 ForeignFunctionInfo
-IRGenModule::getForeignFunctionInfo(CanSILFunctionType type) {
+IRGenModule::getForeignFunctionInfo(CanSILFunctionType type, GenericEnvironment *env) {
   if (type->getLanguage() == SILFunctionLanguage::Swift)
     return ForeignFunctionInfo();
 
   auto &sigInfo = getFuncSignatureInfoForLowered(*this, type);
-  return sigInfo.getSignature(*this).getForeignInfo();
+  return sigInfo.getSignature(*this, env).getForeignInfo();
 }
 
 static void emitApplyArgument(IRGenFunction &IGF,
@@ -689,6 +690,7 @@ static llvm::Function *emitPartialApplicationForwarder(IRGenModule &IGM,
                                    bool calleeHasContext,
                                    llvm::Type *fnTy,
                                    const llvm::AttributeSet &origAttrs,
+                                   GenericEnvironment *env,
                                    CanSILFunctionType origType,
                                    CanSILFunctionType substType,
                                    CanSILFunctionType outType,
@@ -697,7 +699,7 @@ static llvm::Function *emitPartialApplicationForwarder(IRGenModule &IGM,
                                    ArrayRef<ParameterConvention> conventions) {
   llvm::AttributeSet outAttrs;
 
-  llvm::FunctionType *fwdTy = IGM.getFunctionType(outType, outAttrs);
+  llvm::FunctionType *fwdTy = IGM.getFunctionType(outType, env, outAttrs);
   // Build a name for the thunk. If we're thunking a static function reference,
   // include its symbol name in the thunk name.
   llvm::SmallString<20> thunkName;
@@ -718,7 +720,7 @@ static llvm::Function *emitPartialApplicationForwarder(IRGenModule &IGM,
                         llvm::AttributeSet::FunctionIndex, initialAttrs);
   fwd->setAttributes(updatedAttrs);
 
-  IRGenFunction subIGF(IGM, fwd);
+  IRGenFunction subIGF(IGM, fwd, env);
   if (IGM.DebugInfo)
     IGM.DebugInfo->emitArtificialFunction(subIGF, fwd);
   
@@ -1162,6 +1164,7 @@ void irgen::emitFunctionPartialApplication(IRGenFunction &IGF,
 
   // Reserve space for polymorphic bindings.
   auto bindings = NecessaryBindings::forFunctionInvocations(IGF.IGM,
+                                                     IGF.GenericEnv,
                                                      origType, substType, subs);
   if (!bindings.empty()) {
     hasSingleSwiftRefcountedContext = No;
@@ -1325,12 +1328,12 @@ void irgen::emitFunctionPartialApplication(IRGenFunction &IGF,
     assert(args.size() == 1);
 
     llvm::AttributeSet attrs;
-    auto fnPtrTy = IGF.IGM.getFunctionType(origType, attrs)
+    auto fnPtrTy = IGF.IGM.getFunctionType(origType, IGF.GenericEnv, attrs)
       ->getPointerTo();
 
     llvm::Function *forwarder =
       emitPartialApplicationForwarder(IGF.IGM, staticFn, fnContext != nullptr,
-                                      fnPtrTy, attrs, origType, substType,
+                                      fnPtrTy, attrs, IGF.GenericEnv, origType, substType,
                                       outType, subs, nullptr, argConventions);
     llvm::Value *forwarderValue =
       IGF.Builder.CreateBitCast(forwarder, IGF.IGM.Int8PtrTy);
@@ -1406,7 +1409,7 @@ void irgen::emitFunctionPartialApplication(IRGenFunction &IGF,
   
   // Create the forwarding stub.
   llvm::AttributeSet attrs;
-  auto fnPtrTy = IGF.IGM.getFunctionType(origType, attrs)
+  auto fnPtrTy = IGF.IGM.getFunctionType(origType, IGF.GenericEnv, attrs)
     ->getPointerTo();
 
   llvm::Function *forwarder = emitPartialApplicationForwarder(IGF.IGM,
@@ -1414,6 +1417,7 @@ void irgen::emitFunctionPartialApplication(IRGenFunction &IGF,
                                                           fnContext != nullptr,
                                                               fnPtrTy,
                                                               attrs,
+                                                              IGF.GenericEnv,
                                                               origType,
                                                               substType,
                                                               outType,
@@ -1444,7 +1448,7 @@ static llvm::Function *emitBlockCopyHelper(IRGenModule &IGM,
                                      "block_copy_helper",
                                      IGM.getModule());
   func->setAttributes(IGM.constructInitialAttributes());
-  IRGenFunction IGF(IGM, func);
+  IRGenFunction IGF(IGM, func, nullptr);
   if (IGM.DebugInfo)
     IGM.DebugInfo->emitArtificialFunction(IGF, func);
   
@@ -1481,7 +1485,7 @@ static llvm::Function *emitBlockDisposeHelper(IRGenModule &IGM,
                                      "block_destroy_helper",
                                      IGM.getModule());
   func->setAttributes(IGM.constructInitialAttributes());
-  IRGenFunction IGF(IGM, func);
+  IRGenFunction IGF(IGM, func, nullptr);
   if (IGM.DebugInfo)
     IGM.DebugInfo->emitArtificialFunction(IGF, func);
   

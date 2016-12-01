@@ -47,6 +47,7 @@ public:
   /// Collect the necessary bindings to invoke a function with the given
   /// signature.
   static NecessaryBindings forFunctionInvocations(IRGenModule &IGM,
+                                                  GenericEnvironment *env,
                                                   CanSILFunctionType origType,
                                                   CanSILFunctionType substType,
                                                   ArrayRef<Substitution> subs);

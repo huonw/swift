@@ -573,12 +573,13 @@ static void buildValueWitnessFunction(IRGenModule &IGM,
                                       llvm::Function *fn,
                                       ValueWitness index,
                                       FixedPacking packing,
+                                      GenericEnvironment *env,
                                       CanType abstractType,
                                       SILType concreteType,
                                       const TypeInfo &type) {
   assert(isValueWitnessFunction(index));
 
-  IRGenFunction IGF(IGM, fn);
+  IRGenFunction IGF(IGM, fn, env);
   if (IGM.DebugInfo)
     IGM.DebugInfo->emitArtificialFunction(IGF, fn);
 
@@ -1092,6 +1093,7 @@ static llvm::Constant *getMemCpyArrayFunction(IRGenModule &IGM,
 static llvm::Constant *getValueWitness(IRGenModule &IGM,
                                        ValueWitness index,
                                        FixedPacking packing,
+                                       GenericEnvironment *env,
                                        CanType abstractType,
                                        SILType concreteType,
                                        const TypeInfo &concreteTI) {
@@ -1296,19 +1298,20 @@ static llvm::Constant *getValueWitness(IRGenModule &IGM,
   llvm::Function *fn =
     IGM.getAddrOfValueWitness(abstractType, index, ForDefinition);
   if (fn->empty())
-    buildValueWitnessFunction(IGM, fn, index, packing, abstractType,
+    buildValueWitnessFunction(IGM, fn, index, packing, env, abstractType,
                               concreteType, concreteTI);
   return asOpaquePtr(IGM, fn);
 }
 
 /// Collect the value witnesses for a particular type.
 static void addValueWitnesses(IRGenModule &IGM, FixedPacking packing,
+                              GenericEnvironment *env,
                               CanType abstractType,
                               SILType concreteType, const TypeInfo &concreteTI,
                               SmallVectorImpl<llvm::Constant*> &table) {
   for (unsigned i = 0; i != NumRequiredValueWitnesses; ++i) {
     table.push_back(getValueWitness(IGM, ValueWitness(i),
-                                    packing, abstractType, concreteType,
+                                    packing, env, abstractType, concreteType,
                                     concreteTI));
   }
   if (concreteType.getEnumOrBoundGenericEnum() ||
@@ -1317,7 +1320,7 @@ static void addValueWitnesses(IRGenModule &IGM, FixedPacking packing,
          i <= unsigned(ValueWitness::Last_ExtraInhabitantValueWitness);
          ++i) {
       table.push_back(getValueWitness(IGM, ValueWitness(i), packing,
-                                      abstractType, concreteType, concreteTI));
+                                      env, abstractType, concreteType, concreteTI));
     }
   }
   if (concreteType.getEnumOrBoundGenericEnum()) {
@@ -1325,7 +1328,7 @@ static void addValueWitnesses(IRGenModule &IGM, FixedPacking packing,
          i <= unsigned(ValueWitness::Last_EnumValueWitness);
          ++i) {
       table.push_back(getValueWitness(IGM, ValueWitness(i), packing,
-                                      abstractType, concreteType, concreteTI));
+                                      env, abstractType, concreteType, concreteTI));
     }
   }
 }
@@ -1338,6 +1341,7 @@ bool irgen::hasDependentValueWitnessTable(IRGenModule &IGM, CanType ty) {
 }
 
 static void addValueWitnessesForAbstractType(IRGenModule &IGM,
+                                             GenericEnvironment *env,
                                  CanType abstractType,
                                  SmallVectorImpl<llvm::Constant*> &witnesses,
                                  bool &canBeConstant) {
@@ -1351,13 +1355,14 @@ static void addValueWitnessesForAbstractType(IRGenModule &IGM,
   // changing the value witnesses for something that's fixed-layout.
   canBeConstant = concreteTI.isFixedSize();
 
-  addValueWitnesses(IGM, packing, abstractType,
+  addValueWitnesses(IGM, packing, env, abstractType,
                     concreteLoweredType, concreteTI, witnesses);
 }
 
 /// Emit a value-witness table for the given type, which is assumed to
 /// be non-dependent.
 llvm::Constant *irgen::emitValueWitnessTable(IRGenModule &IGM,
+                                             GenericEnvironment *env,
                                              CanType abstractType) {
   // We shouldn't emit global value witness tables for generic type instances.
   assert(!isa<BoundGenericType>(abstractType) &&
@@ -1365,7 +1370,7 @@ llvm::Constant *irgen::emitValueWitnessTable(IRGenModule &IGM,
 
   SmallVector<llvm::Constant*, MaxNumValueWitnesses> witnesses;
   bool canBeConstant = false;
-  addValueWitnessesForAbstractType(IGM, abstractType, witnesses, canBeConstant);
+  addValueWitnessesForAbstractType(IGM, env, abstractType, witnesses, canBeConstant);
 
   auto tableTy = llvm::ArrayType::get(IGM.Int8PtrTy, witnesses.size());
   auto table = llvm::ConstantArray::get(tableTy, witnesses);
@@ -1378,7 +1383,8 @@ llvm::Constant *irgen::emitValueWitnessTable(IRGenModule &IGM,
   return llvm::ConstantExpr::getBitCast(global, IGM.WitnessTablePtrTy);
 }
 
-llvm::Constant *IRGenModule::emitFixedTypeLayout(CanType t,
+llvm::Constant *IRGenModule::emitFixedTypeLayout(GenericEnvironment *env,
+                                                 CanType t,
                                                  const FixedTypeInfo &ti) {
   auto silTy = SILType::getPrimitiveAddressType(t);
   // Collect the interesting information that gets encoded in a type layout
@@ -1430,7 +1436,7 @@ llvm::Constant *IRGenModule::emitFixedTypeLayout(CanType t,
        witness <= ValueWitness::Last_RequiredTypeLayoutWitness;
        witness = ValueWitness(unsigned(witness) + 1)) {
     witnesses.push_back(getValueWitness(*this, witness,
-                                        packing, t, silTy, ti));
+                                        packing, env, t, silTy, ti));
   }
 
   if (ti.mayHaveExtraInhabitants(*this))
@@ -1438,7 +1444,7 @@ llvm::Constant *IRGenModule::emitFixedTypeLayout(CanType t,
          witness <= ValueWitness::Last_TypeLayoutWitness;
          witness = ValueWitness(unsigned(witness) + 1))
       witnesses.push_back(getValueWitness(*this, witness,
-                                          packing, t, silTy, ti));
+                                          packing, env, t, silTy, ti));
 
   auto layoutTy = llvm::ArrayType::get(Int8PtrTy, witnesses.size());
   auto layoutVal = llvm::ConstantArray::get(layoutTy, witnesses);
@@ -1464,6 +1470,7 @@ llvm::Constant *IRGenModule::emitFixedTypeLayout(CanType t,
 /// Emit the elements of a dependent value witness table template into a
 /// vector.
 void irgen::emitDependentValueWitnessTablePattern(IRGenModule &IGM,
+                                    GenericEnvironment *env,
                                     CanType abstractType,
                                     SmallVectorImpl<llvm::Constant*> &fields) {
   // We shouldn't emit global value witness tables for generic type instances.
@@ -1475,7 +1482,7 @@ void irgen::emitDependentValueWitnessTablePattern(IRGenModule &IGM,
          "emitting VWT pattern for fixed-layout type");
 
   bool canBeConstant = false;
-  addValueWitnessesForAbstractType(IGM, abstractType, fields, canBeConstant);
+  addValueWitnessesForAbstractType(IGM, env, abstractType, fields, canBeConstant);
 }
 
 FixedPacking TypeInfo::getFixedPacking(IRGenModule &IGM) const {

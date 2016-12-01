@@ -51,7 +51,7 @@ struct GenericRequirement {
 /// value.
 llvm::Value *
 emitGenericRequirementFromSubstitutions(IRGenFunction &IGF,
-                                        CanGenericSignature signature,
+                                        CanGenericSignature generics,
                                         ModuleDecl &module,
                                         GenericRequirement requirement,
                                         ArrayRef<Substitution> subs);

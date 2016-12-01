@@ -582,7 +582,7 @@ void IRGenModule::emitRuntimeRegistration() {
     Builder.CreateCall(RegistrationFunction, {});
   }
   
-  IRGenFunction RegIGF(*this, RegistrationFunction);
+  IRGenFunction RegIGF(*this, RegistrationFunction, nullptr);
   if (DebugInfo && !Context.LangOpts.DebuggerSupport)
     DebugInfo->emitArtificialFunction(RegIGF, RegistrationFunction);
   
@@ -1020,7 +1020,7 @@ void IRGenModule::emitTypeVerifier() {
     Builder.CreateCall(VerifierFunction, {});
   }
 
-  IRGenFunction VerifierIGF(*this, VerifierFunction);
+  IRGenFunction VerifierIGF(*this, VerifierFunction, nullptr);
   if (DebugInfo)
     DebugInfo->emitArtificialFunction(VerifierIGF, VerifierFunction);
 
@@ -1758,6 +1758,7 @@ llvm::Function *IRGenModule::getAddrOfSILFunction(SILFunction *f,
 
   llvm::AttributeSet attrs;
   llvm::FunctionType *fnType = getFunctionType(f->getLoweredFunctionType(),
+                                               f->getGenericEnvironment(),
                                                attrs);
 
   auto cc = expandCallingConv(*this, f->getRepresentation());
@@ -3249,7 +3250,7 @@ IRGenModule::getOrCreateHelperFunction(StringRef fnName, llvm::Type *resultTy,
   llvm::Constant *fn = Module.getOrInsertFunction(fnName, fnTy);
 
   if (llvm::Function *def = shouldDefineHelper(*this, fn)) {
-    IRGenFunction IGF(*this, def);
+    IRGenFunction IGF(*this, def, nullptr);
     if (DebugInfo)
       DebugInfo->emitArtificialFunction(IGF, def);
     generate(IGF);
