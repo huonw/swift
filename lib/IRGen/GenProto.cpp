@@ -1278,17 +1278,6 @@ public:
       }
       return *Fulfillments;
     }
-
-    void bindArchetypeAccessPathsInConformance(IRGenFunction &IGF) {
-      auto declCtx = Conformance.getDeclContext();
-      if (auto generics = declCtx->getGenericSignatureOfContext()) {
-        auto getInContext = [&](CanType type) -> CanType {
-          return ArchetypeBuilder::mapTypeIntoContext(declCtx, type)
-              ->getCanonicalType();
-        };
-        bindArchetypeAccessPaths(IGF, generics, getInContext);
-      }
-    }
   };
 }
 
@@ -1348,9 +1337,6 @@ getAssociatedTypeMetadataAccessFunction(AssociatedTypeDecl *requirement,
 
   // Bind local type data from the metadata argument.
   IGF.bindLocalTypeDataFromTypeMetadata(ConcreteType, IsExact, self);
-
-  // Bind archetype access paths.
-  bindArchetypeAccessPathsInConformance(IGF);
 
   // For now, assume that an associated type is cheap enough to access
   // that it doesn't need a new cache entry.
@@ -1475,9 +1461,6 @@ getAssociatedTypeWitnessTableAccessFunction(AssociatedTypeDecl *requirement,
   IGF.bindLocalTypeDataFromTypeMetadata(associatedType, IsExact,
                                         associatedTypeMetadata);
   IGF.bindLocalTypeDataFromTypeMetadata(ConcreteType, IsExact, self);
-
-  // Bind archetype access paths.
-  bindArchetypeAccessPathsInConformance(IGF);
 
   // For now, assume that finding an abstract conformance is always
   // fast enough that it's not worth caching.
@@ -1825,58 +1808,6 @@ bool irgen::hasPolymorphicParameters(CanSILFunctionType ty) {
   }
 }
 
-static
-void addPotentialArchetypeAccessPath(IRGenFunction &IGF,
-                                     CanType targetDepType,
-                                     CanType sourceDepType,
-                                     GetTypeParameterInContextFn getInContext) {
-  assert(targetDepType->isTypeParameter());
-  assert(sourceDepType->isTypeParameter());
-
-  // We can only break down an associated-type path.
-  auto sourceDepMemberType = dyn_cast<DependentMemberType>(sourceDepType);
-  if (!sourceDepMemberType) return;
-
-  // We only really need to do this when there's a non-trivial set of
-  // conformances, but we can't determine that just from this decl:
-  // the associated type might gain conformances in a refining protocol.
-  auto association = sourceDepMemberType->getAssocType();
-
-  // These can end up as non-archetypes because of multiple levels of
-  // equality.
-  auto destArchetype =
-    dyn_cast<ArchetypeType>(getInContext(targetDepType));
-  if (!destArchetype) return;
-  auto srcBaseArchetype =
-    dyn_cast<ArchetypeType>(getInContext(sourceDepMemberType.getBase()));
-  if (!srcBaseArchetype) return;
-
-  IGF.addArchetypeAccessPath(destArchetype,
-                             {srcBaseArchetype, association});
-}
-
-void irgen::bindArchetypeAccessPaths(IRGenFunction &IGF, GenericSignature *Generics,
-                              GetTypeParameterInContextFn getInContext) {
-  // Remember all the extra ways we have of reaching the parameter
-  // archetypes due to type equality constraints.
-  for (auto reqt : Generics->getRequirements()) {
-    // Ignore non-same-type requirements in this pass.
-    if (reqt.getKind() != RequirementKind::SameType) continue;
-
-    // Ignore equality constraints to concrete types.  This is really
-    // just a fast-path; we still have to handle this case later.
-    // TODO: This might be a faster / better-cached way to materialize
-    // local type data for the concrete type.
-    if (!reqt.getSecondType()->isTypeParameter()) continue;
-
-    auto firstType = reqt.getFirstType()->getCanonicalType();
-    auto secondType = reqt.getSecondType()->getCanonicalType();
-
-    addPotentialArchetypeAccessPath(IGF, firstType, secondType, getInContext);
-    addPotentialArchetypeAccessPath(IGF, secondType, firstType, getInContext);
-  }
-}
-
 /// Emit a polymorphic parameters clause, binding all the metadata necessary.
 void EmitPolymorphicParameters::emit(Explosion &in,
                                      WitnessMetadata *witnessMetadata,
@@ -1898,26 +1829,6 @@ void EmitPolymorphicParameters::emit(Explosion &in,
 
   // Bind all the fulfillments we can from the formal parameters.
   bindParameterSources(getParameter);
-
-  if (!Generics) return;
-  
-  // Bind all the archetype access paths.
-  bindArchetypeAccessPaths(IGF, Generics, getInContext);
-}
-
-void IRGenFunction::addArchetypeAccessPath(CanArchetypeType targetArchetype,
-                                           ArchetypeAccessPath accessPath) {
-  ArchetypeAccessPaths[targetArchetype].push_back(accessPath);
-}
-
-ArrayRef<IRGenFunction::ArchetypeAccessPath>
-IRGenFunction::getArchetypeAccessPaths(CanArchetypeType targetArchetype) {
-  auto it = ArchetypeAccessPaths.find(targetArchetype);
-  if (it == ArchetypeAccessPaths.end()) {
-    return {};
-  } else {
-    return it->second;
-  }
 }
 
 
@@ -2688,12 +2599,6 @@ void GenericTypeRequirements::bindFromBuffer(IRGenFunction &IGF,
                                              Address buffer,
                                     GetTypeParameterInContextFn getInContext) {
   bindFromGenericRequirementsBuffer(IGF, Requirements, buffer, getInContext);
-
-  auto Generics = TheDecl->getGenericSignature();
-  if (!Generics) return;
-
-  // Bind all the archetype access paths in the signature's requirements.
-  bindArchetypeAccessPaths(IGF, Generics, getInContext);
 }
 
 void irgen::bindFromGenericRequirementsBuffer(IRGenFunction &IGF,

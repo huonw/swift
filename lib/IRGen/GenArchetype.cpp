@@ -19,6 +19,7 @@
 #include "swift/AST/ASTContext.h"
 #include "swift/AST/Types.h"
 #include "swift/AST/Decl.h"
+#include "swift/AST/GenericEnvironment.h"
 #include "swift/SIL/SILValue.h"
 #include "swift/SIL/TypeLowering.h"
 #include "llvm/ADT/SmallString.h"
@@ -115,31 +116,6 @@ findConformanceDeclaration(ArrayRef<ProtocolDecl*> conformsTo,
   return nullptr;
 }
 
-static IRGenFunction::ArchetypeAccessPath
-findAccessPathDeclaringConformance(IRGenFunction &IGF,
-                                   CanArchetypeType archetype,
-                                   ProtocolDecl *protocol) {
-  // Consider all the associated type relationships we know about.
-
-  // Use the archetype's parent relationship first if possible.
-  if (!archetype->isPrimary()) {
-    auto parent = archetype.getParent();
-    auto association =
-      findConformanceDeclaration(parent->getConformsTo(),
-                                 archetype->getAssocType(), protocol);
-    if (association) return { parent, association };
-  }
-
-  for (auto accessPath : IGF.getArchetypeAccessPaths(archetype)) {
-    auto association =
-      findConformanceDeclaration(accessPath.BaseType->getConformsTo(),
-                                 accessPath.Association, protocol);
-    if (association) return { accessPath.BaseType, association };
-  }
-
-  llvm_unreachable("no relation found that declares conformance to target");
-}
-
 namespace {
 
 /// Common type implementation details for all archetypes.
@@ -196,14 +172,39 @@ public:
 
     // If that's not present, this conformance must be implied by some
     // associated-type relationship.
-    auto accessPath =
-      findAccessPathDeclaringConformance(IGF, archetype, protocol);
+    auto env = IGF.GenericEnv;
+    assert(env && "attempting to get witness table without a generic environment");
+    auto module = IGF.getSwiftModule();
+    auto sig = env->getGenericSignature()->getCanonicalSignature();
+    auto builder = IGF.IGM.Context.getOrCreateArchetypeBuilder(sig, module);
+    auto outOfContextType = env->mapTypeOutOfContext(module, archetype);
+    auto resolved = builder->resolveArchetype(outOfContextType);
+    auto equivalenceClass = resolved->getEquivalenceClass();
+
+    CanArchetypeType parent;
+    AssociatedTypeDecl *association = nullptr;
+    for (auto pat : equivalenceClass) {
+      auto possibleParent = pat->getParent();
+      // is this an associated type?
+      if (!possibleParent) continue;
+      // is this a member type of a type parameter?
+      if (possibleParent->getType(*builder).isConcreteType()) continue;
+
+      auto curAssociation = pat->getResolvedAssociatedType();
+
+      auto conformingProtocols = curAssociation->getConformingProtocols();
+      if (llvm::find(conformingProtocols, protocol) != conformingProtocols.end()) {
+        association = curAssociation;
+        parent = CanArchetypeType(env->mapTypeIntoContext(module, possibleParent->getDependentType(*builder, true))
+                                  ->getCanonicalType()->castTo<ArchetypeType>());
+        break;
+      }
+    }
+    assert(association && "could not find associated type declaring this confromance");
 
     // To do this, we need the metadata for the associated type.
     auto associatedMetadata = emitArchetypeTypeMetadataRef(IGF, archetype);
 
-    CanArchetypeType parent = accessPath.BaseType;
-    AssociatedTypeDecl *association = accessPath.Association;
     wtable = emitAssociatedTypeWitnessTableRef(IGF, parent, association,
                                                associatedMetadata,
                                                protocol);
