@@ -35,7 +35,7 @@ namespace irgen {
   using GetTypeParameterInContextFn =
     llvm::function_ref<CanType(CanType type)>;
 
-/r  /// Emit a type metadata reference for an archetype.
+  /// Emit a type metadata reference for an archetype.
   llvm::Value *emitArchetypeTypeMetadataRef(IRGenFunction &IGF,
                                             CanArchetypeType archetype);
 

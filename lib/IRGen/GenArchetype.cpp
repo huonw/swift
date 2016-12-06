@@ -179,10 +179,18 @@ public:
     auto builder = IGF.IGM.Context.getOrCreateArchetypeBuilder(sig, module);
     auto outOfContextType = env->mapTypeOutOfContext(module, archetype);
     auto resolved = builder->resolveArchetype(outOfContextType);
+    auto conformsTo = resolved->getConformsTo();
+
+    auto found = conformsTo.find(protocol);
+    assert(found != conformsTo.end() && "could not find conformance for protocol");
+    auto requirementSource = found->second;
+
+    auto association = cast<AssociatedTypeDecl>(requirementSource.getDecl());
+
     auto equivalenceClass = resolved->getEquivalenceClass();
 
     CanArchetypeType parent;
-    AssociatedTypeDecl *association = nullptr;
+    AssociatedTypeDecl *association2 = nullptr;
     for (auto pat : equivalenceClass) {
       auto possibleParent = pat->getParent();
       // is this an associated type?
@@ -194,13 +202,14 @@ public:
 
       auto conformingProtocols = curAssociation->getConformingProtocols();
       if (llvm::find(conformingProtocols, protocol) != conformingProtocols.end()) {
-        association = curAssociation;
+        association2 = curAssociation;
         parent = CanArchetypeType(env->mapTypeIntoContext(module, possibleParent->getDependentType(*builder, true))
                                   ->getCanonicalType()->castTo<ArchetypeType>());
         break;
       }
     }
-    assert(association && "could not find associated type declaring this confromance");
+    assert(association2 && "could not find associated type declaring this confromance");
+
 
     // To do this, we need the metadata for the associated type.
     auto associatedMetadata = emitArchetypeTypeMetadataRef(IGF, archetype);

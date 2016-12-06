@@ -879,7 +879,7 @@ bool SILParser::parseSILType(SILType &Result,
 
   if (auto fnType = dyn_cast<FunctionTypeRepr>(TyR.get())) {
     if (auto generics = fnType->getGenericParams()) {
-      GenericEnv = handleSILGenericParams(P.Context, generics, &P.SF);
+      GenericEnv = handleSILGenericParams(P.Context, generics, &P.SF, nullptr);
       fnType->setGenericEnvironment(GenericEnv);
     }
   }
@@ -2947,7 +2947,7 @@ bool SILParser::parseSILInstruction(SILBasicBlock *BB, SILBuilder &B) {
       if (auto generics = fnType->getGenericParams()) {
         assert(!Ty.wasValidated() && Ty.getType().isNull());
 
-        genericEnv = handleSILGenericParams(P.Context, generics, &P.SF);
+        genericEnv = handleSILGenericParams(P.Context, generics, &P.SF, nullptr);
         fnType->setGenericEnvironment(genericEnv);
       }
     }
@@ -4406,7 +4406,7 @@ ProtocolConformance *SILParser::parseProtocolConformance(
 
   auto *genericParams = P.maybeParseGenericParams().getPtrOrNull();
   if (genericParams) {
-    genericEnv = handleSILGenericParams(P.Context, genericParams, &P.SF);
+    genericEnv = handleSILGenericParams(P.Context, genericParams, &P.SF, nullptr);
   }
 
   ProtocolConformance *retVal =

@@ -211,7 +211,8 @@ namespace swift {
   /// Expose TypeChecker's handling of GenericParamList to SIL parsing.
   GenericEnvironment *handleSILGenericParams(ASTContext &Ctx,
                                              GenericParamList *genericParams,
-                                             DeclContext *DC);
+                                             DeclContext *DC,
+                                             Decl *decl);
 
   /// Turn the given module into SIL IR.
   ///
