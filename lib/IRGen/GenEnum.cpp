@@ -1481,7 +1481,7 @@ namespace {
       std::string name = Mangler.mangleOutlinedCopyFunction(theEnum);
       auto func = createOutlineLLVMFunction(IGM, name, PayloadTypesAndTagType);
 
-      IRGenFunction IGF(IGM, func);
+      IRGenFunction IGF(IGM, func, theEnum->getGenericEnvironment());
       Explosion src = IGF.collectParameters();
 
       EnumPayload payload;
@@ -1514,7 +1514,7 @@ namespace {
       std::string name = Mangler.mangleOutlinedConsumeFunction(theEnum);
       auto func = createOutlineLLVMFunction(IGM, name, PayloadTypesAndTagType);
 
-      IRGenFunction IGF(IGM, func);
+      IRGenFunction IGF(IGM, func, theEnum->getGenericEnvironment());
       Explosion src = IGF.collectParameters();
 
       EnumPayload payload;
@@ -2899,7 +2899,7 @@ namespace {
       std::string name = Mangler.mangleOutlinedCopyFunction(theEnum);
       auto func = createOutlineLLVMFunction(IGM, name, PayloadTypesAndTagType);
 
-      IRGenFunction IGF(IGM, func);
+      IRGenFunction IGF(IGM, func, theEnum->getGenericEnvironment());
       Explosion src = IGF.collectParameters();
 
       auto parts = destructureAndTagLoadableEnumFromOutlined(IGF, src);
@@ -2925,7 +2925,7 @@ namespace {
       std::string name = Mangler.mangleOutlinedCopyFunction(theEnum);
       auto func = createOutlineLLVMFunction(IGM, name, PayloadTypesAndTagType);
 
-      IRGenFunction IGF(IGM, func);
+      IRGenFunction IGF(IGM, func, theEnum->getGenericEnvironment());
       Explosion src = IGF.collectParameters();
 
       auto parts = destructureAndTagLoadableEnumFromOutlined(IGF, src);

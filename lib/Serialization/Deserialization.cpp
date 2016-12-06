@@ -4320,7 +4320,7 @@ void ModuleFile::finishNormalConformance(NormalProtocolConformance *conformance,
       ArchetypeBuilder builder(
                          getContext(),
                          LookUpConformanceInModule(getAssociatedModule()));
-      builder.addGenericSignature(syntheticSig);
+      builder.addGenericSignature(syntheticSig, /* FIXME */ nullptr);
       builder.finalize(SourceLoc());
       syntheticEnv = builder.getGenericEnvironment(syntheticSig);
 

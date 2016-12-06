@@ -249,3 +249,4 @@ SILType getSingletonAggregateFieldType(IRGenModule &IGM,
 } // end namespace swift
 
 #endif
+

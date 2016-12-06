@@ -873,7 +873,7 @@ bool SILParser::parseSILType(SILType &Result,
 
   if (TyR.isNull())
     return true;
-  
+
   // Resolve the generic environments for parsed generic function and box types.
   class HandleSILGenericParamsWalker : public ASTWalker {
     ASTContext &C;
@@ -887,13 +887,13 @@ bool SILParser::parseSILType(SILType &Result,
     bool walkToTypeReprPre(TypeRepr *T) override {
       if (auto fnType = dyn_cast<FunctionTypeRepr>(T)) {
         if (auto generics = fnType->getGenericParams()) {
-          auto env = handleSILGenericParams(C, generics, SF);
+          auto env = handleSILGenericParams(C, generics, SF, /* FIXME */ nullptr);
           fnType->setGenericEnvironment(env);
         }
       }
       if (auto boxType = dyn_cast<SILBoxTypeRepr>(T)) {
         if (auto generics = boxType->getGenericParams()) {
-          auto env = handleSILGenericParams(C, generics, SF);
+          auto env = handleSILGenericParams(C, generics, SF, /* FIXME */ nullptr);
           boxType->setGenericEnvironment(env);
         }
       }
@@ -2941,7 +2941,7 @@ bool SILParser::parseSILInstruction(SILBasicBlock *BB, SILBuilder &B) {
       if (auto generics = fnType->getGenericParams()) {
         assert(!Ty.wasValidated() && Ty.getType().isNull());
 
-        genericEnv = handleSILGenericParams(P.Context, generics, &P.SF);
+        genericEnv = handleSILGenericParams(P.Context, generics, &P.SF, nullptr);
         fnType->setGenericEnvironment(genericEnv);
       }
     }
@@ -4415,7 +4415,7 @@ ProtocolConformance *SILParser::parseProtocolConformance(
 
   auto *genericParams = P.maybeParseGenericParams().getPtrOrNull();
   if (genericParams) {
-    genericEnv = handleSILGenericParams(P.Context, genericParams, &P.SF);
+    genericEnv = handleSILGenericParams(P.Context, genericParams, &P.SF, nullptr);
   }
 
   ProtocolConformance *retVal =

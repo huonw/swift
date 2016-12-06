@@ -2434,7 +2434,7 @@ buildThunkSignature(SILGenFunction &gen,
   int depth = 0;
   if (inheritGenericSig) {
     if (auto genericSig = gen.F.getLoweredFunctionType()->getGenericSignature()) {
-      builder.addGenericSignature(genericSig);
+      builder.addGenericSignature(genericSig, /* FIXME */ nullptr);
       depth = genericSig->getGenericParams().back()->getDepth() + 1;
     }
   }
@@ -2444,7 +2444,8 @@ buildThunkSignature(SILGenFunction &gen,
   builder.addGenericParameter(newGenericParam);
   Requirement newRequirement(RequirementKind::Conformance, newGenericParam,
                              openedExistential->getOpenedExistentialType());
-  RequirementSource source(RequirementSource::Explicit, SourceLoc());
+  RequirementSource source(RequirementSource::Explicit, SourceLoc(),
+                           /* FIXME */ nullptr);
   builder.addRequirement(newRequirement, source);
 
   GenericSignature *genericSig = builder.getGenericSignature();

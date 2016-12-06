@@ -780,7 +780,7 @@ public:
 
   /// Expose TypeChecker's handling of GenericParamList to SIL parsing.
   GenericEnvironment *handleSILGenericParams(GenericParamList *genericParams,
-                                             DeclContext *DC);
+                                             DeclContext *DC, Decl *decl);
 
   /// \brief Resolves a TypeRepr to a type.
   ///
@@ -1094,7 +1094,7 @@ public:
   ///
   /// \param genericParams The generic parameters to validate.
   ///
-  /// \param dc The declaration context in which to perform the validation.
+  /// \param decl The declaration in which the validation is being perform
   ///
   /// \param outerSignature The generic signature of the outer
   /// context, if not available as part of the \c dc argument (used
@@ -1107,6 +1107,7 @@ public:
   /// \returns the resulting generic environment.
   GenericEnvironment *checkGenericEnvironment(
                         GenericParamList *genericParams,
+                        Decl *decl,
                         DeclContext *dc,
                         GenericSignature *outerSignature,
                         bool allowConcreteGenericParams,
@@ -1125,10 +1126,11 @@ public:
   /// \returns the resulting generic environment.
   GenericEnvironment *checkGenericEnvironment(
                         GenericParamList *genericParams,
+                        Decl *decl,
                         DeclContext *dc,
                         GenericSignature *outerSignature,
                         bool allowConcreteGenericParams) {
-    return checkGenericEnvironment(genericParams, dc, outerSignature,
+    return checkGenericEnvironment(genericParams, decl, dc, outerSignature,
                                    allowConcreteGenericParams,
                                    [&](ArchetypeBuilder &) { });
   }
@@ -1141,6 +1143,7 @@ public:
   /// Check the generic parameters in the given generic parameter list (and its
   /// parent generic parameter lists) according to the given resolver.
   void checkGenericParamList(ArchetypeBuilder *builder,
+                             Decl *parentDecl,
                              GenericParamList *genericParams,
                              GenericSignature *parentSig,
                              GenericTypeResolver *resolver);
