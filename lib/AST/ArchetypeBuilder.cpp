@@ -63,6 +63,10 @@ void RequirementSource::dump(llvm::raw_ostream &out,
   case Inherited:
     out << "inherited";
     break;
+
+  case ProtocolSelf:
+    out << "protocol_self";
+    break;
   }
 
   if (srcMgr && getLoc().isValid()) {
@@ -658,6 +662,7 @@ Type ArchetypeBuilder::PotentialArchetype::getTypeInContext(
     case RequirementSource::Explicit:
     case RequirementSource::Inferred:
     case RequirementSource::Protocol:
+    case RequirementSource::ProtocolSelf:
     case RequirementSource::Redundant:
       Protos.push_back(conforms.first);
       break;
@@ -904,8 +909,9 @@ bool ArchetypeBuilder::addConformanceRequirement(PotentialArchetype *PAT,
   if (!T->addConformance(Proto, /*updateExistingSource=*/true, Source, *this))
     return false;
 
-  RequirementSource InnerSource(RequirementSource::Redundant, Source.getLoc(), Source.getDecl());
-  
+  auto InnerKind = Source.getKind() == RequirementSource::ProtocolSelf ? RequirementSource::ProtocolSelf : RequirementSource::Redundant;
+  RequirementSource InnerSource(InnerKind, Source.getLoc(), Source.getDecl());
+
   bool inserted = Visited.insert(Proto).second;
   assert(inserted);
   (void) inserted;
@@ -926,9 +932,11 @@ bool ArchetypeBuilder::addConformanceRequirement(PotentialArchetype *PAT,
     if (auto AssocType = dyn_cast<AssociatedTypeDecl>(Member)) {
       // Add requirements placed directly on this associated type.
       auto AssocPA = T->getNestedType(AssocType->getName(), *this);
+      auto Kind = Source.getKind() == RequirementSource::ProtocolSelf ?
+        RequirementSource::Explicit : RequirementSource::Protocol;
+
       if (AssocPA != T) {
-        if (addAbstractTypeParamRequirements(AssocType, AssocPA,
-                                             RequirementSource::Protocol,
+        if (addAbstractTypeParamRequirements(AssocType, AssocPA, Kind,
                                              Visited))
           return true;
       }
@@ -2064,12 +2072,14 @@ void ArchetypeBuilder::dump(llvm::raw_ostream &out) {
 }
 
 void ArchetypeBuilder::addGenericSignature(GenericSignature *sig,
-                                           Decl *decl) {
+                                           Decl *decl,
+                                           bool protocolSelf) {
   if (!sig) return;
   
-  RequirementSource::Kind sourceKind = RequirementSource::Explicit;
-  for (auto param : sig->getGenericParams())
+  RequirementSource::Kind sourceKind = protocolSelf ? RequirementSource::ProtocolSelf : RequirementSource::Explicit;
+  for (auto param : sig->getGenericParams()) {
     addGenericParameter(param);
+  }
 
   RequirementSource source(sourceKind, SourceLoc(), decl);
   for (auto &reqt : sig->getRequirements()) {
@@ -2090,6 +2100,7 @@ static void collectRequirements(ArchetypeBuilder &builder,
     switch (source.getKind()) {
     case RequirementSource::Explicit:
     case RequirementSource::Inferred:
+    case RequirementSource::ProtocolSelf:
       // The requirement was explicit and required, keep it.
       break;
 
@@ -2193,3 +2204,29 @@ GenericEnvironment *ArchetypeBuilder::getGenericEnvironment(
   return genericEnv;
 }
 
+typedef llvm::SmallPtrSet<ArchetypeBuilder::PotentialArchetype *, 16> PATVisited;
+typedef std::pair<ArchetypeBuilder::PotentialArchetype *, size_t> PATPathElement;
+typedef llvm::SmallVector<PATPathElement, 8> PATPath;
+typedef llvm::function_ref<bool(ArchetypeBuilder::PotentialArchetype *, ArrayRef<PATPathElement>)> PATPred;
+
+static bool walkPotentialArchetype(ArchetypeBuilder::PotentialArchetype *pat, PATVisited &visited, PATPath &path, PATPred pred) {
+  for (auto *equivalent : pat->getEquivalenceClass()) {
+    if (!visited.insert(equivalent).second) continue;
+
+    path.push_back({ equivalent, 0 });
+    if (pred(equivalent, path)) return true;
+
+    if (auto parent = equivalent->getParent()) {
+      if (walkPotentialArchetype(parent, visited, path, pred)) return true;
+    }
+    path.pop_back();
+  }
+  return false;
+}
+
+bool ArchetypeBuilder::PotentialArchetype::findParentIf(PATPred pred) {
+  PATVisited visited;
+  PATPath path;
+
+  return walkPotentialArchetype(this, visited, path, pred);
+}

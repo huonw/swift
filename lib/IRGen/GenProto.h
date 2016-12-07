@@ -85,6 +85,7 @@ namespace irgen {
   llvm::Value *emitAssociatedTypeWitnessTableRef(IRGenFunction &IGF,
                                                  llvm::Value *parentMetadata,
                                                  llvm::Value *wtable,
+                                                 CanType type,
                                           AssociatedTypeDecl *associatedType,
                                           llvm::Value *associatedTypeMetadata,
                                           ProtocolDecl *associatedProtocol);

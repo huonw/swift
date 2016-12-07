@@ -51,6 +51,28 @@ public:
   bool isPrefix() const { return IsPrefix; }
 };
 
+class WitnessTableConformanceEntry {
+  CanType Type;
+  ProtocolDecl *Protocol;
+  WitnessIndex Index;
+
+public:
+  WitnessTableConformanceEntry(CanType type, ProtocolDecl *protocol, WitnessIndex index)
+    : Type(type), Protocol(protocol), Index(index) {}
+
+  CanType getType() const {
+    return Type;
+  }
+
+  ProtocolDecl *getProtocol() const {
+    return Protocol;
+  }
+
+  WitnessIndex getIndex() const {
+    return Index;
+  }
+};
+
 /// A witness to a specific element of a protocol.  Every
 /// ProtocolTypeInfo stores one of these for each declaration in the
 /// protocol.
@@ -143,7 +165,7 @@ public:
 
 /// An abstract description of a protocol.
 class ProtocolInfo final :
-    private llvm::TrailingObjects<ProtocolInfo, WitnessTableEntry> {
+    private llvm::TrailingObjects<ProtocolInfo, WitnessTableEntry, WitnessTableConformanceEntry> {
   friend TrailingObjects;
 
   /// A singly-linked-list of all the protocols that have been laid out.
@@ -156,21 +178,38 @@ class ProtocolInfo final :
   /// The number of table entries in this protocol layout.
   unsigned NumTableEntries;
 
+  /// The number of conformances
+  unsigned NumConformanceEntries;
+
   /// A table of all the conformances we've needed so far for this
   /// protocol.  We expect this to be quite small for most protocols.
   mutable llvm::SmallDenseMap<const ProtocolConformance*, ConformanceInfo*, 2>
     Conformances;
 
-  ProtocolInfo(unsigned numWitnesses, ArrayRef<WitnessTableEntry> table)
-    : NumWitnesses(numWitnesses), NumTableEntries(table.size()) {
+  ProtocolInfo(unsigned numWitnesses, ArrayRef<WitnessTableEntry> table, ArrayRef<WitnessTableConformanceEntry> conformanceTable,
+               CanGenericSignature sig)
+    : NumWitnesses(numWitnesses), NumTableEntries(table.size()), NumConformanceEntries(conformanceTable.size()), Signature(sig) {
     std::uninitialized_copy(table.begin(), table.end(),
                             getTrailingObjects<WitnessTableEntry>());
+    std::uninitialized_copy(conformanceTable.begin(), conformanceTable.end(),
+                            getTrailingObjects<WitnessTableConformanceEntry>());
   }
 
   static ProtocolInfo *create(unsigned numWitnesses,
-                              ArrayRef<WitnessTableEntry> table);
+                              ArrayRef<WitnessTableEntry> table,
+                              ArrayRef<WitnessTableConformanceEntry> conformances,
+                             CanGenericSignature sig);
+
+  size_t numTrailingObjects(OverloadToken<WitnessTableEntry>) const {
+    return NumTableEntries;
+  }
+  size_t numTrailingObjects(OverloadToken<WitnessTableConformanceEntry>) const {
+    return NumConformanceEntries;
+  }
 
 public:
+  CanGenericSignature Signature;
+
   const ConformanceInfo &getConformance(IRGenModule &IGM,
                                         ProtocolDecl *protocol,
                                         const ProtocolConformance *conf) const;
@@ -192,6 +231,13 @@ public:
       if (witness.getMember() == member)
         return witness;
     llvm_unreachable("didn't find entry for member!");
+  }
+
+  ArrayRef<WitnessTableConformanceEntry> getConformanceEntries() const {
+    return {getTrailingObjects<WitnessTableConformanceEntry>(), NumConformanceEntries};
+  }
+  const WitnessTableConformanceEntry &getConformanceEntry(CanType type, ProtocolDecl *protocol) const {
+    llvm_unreachable("unimplemented");
   }
 
   ~ProtocolInfo();

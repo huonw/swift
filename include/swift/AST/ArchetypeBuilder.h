@@ -83,6 +83,9 @@ public:
     ///
     /// These are dropped when building the GenericSignature.
     Inherited,
+
+    /// The requirement is the Self: Protocol requirement. (FIXME)
+    ProtocolSelf,
   };
 
   RequirementSource(Kind kind, SourceLoc loc, Decl *decl) : StoredKind(kind), Loc(loc), StoredDecl(decl) { }
@@ -256,7 +259,8 @@ public:
 
   /// \brief Add all of a generic signature's parameters and requirements.
   void addGenericSignature(GenericSignature *sig,
-                           Decl *decl);
+                           Decl *decl,
+                           bool protocolSelf = false);
 
   /// \brief Build the generic signature.
   GenericSignature *getGenericSignature();
@@ -643,6 +647,8 @@ public:
   /// Whether this potential archetype makes a better archetype anchor than
   /// the given archetype anchor.
   bool isBetterArchetypeAnchor(PotentialArchetype *other) const;
+
+  bool findParentIf(llvm::function_ref<bool(PotentialArchetype *, ArrayRef<std::pair<PotentialArchetype *, size_t>>)>);
 
   void dump(llvm::raw_ostream &Out, SourceManager *SrcMgr,
             unsigned Indent);

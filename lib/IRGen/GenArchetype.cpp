@@ -205,7 +205,56 @@ public:
 
     CanArchetypeType parent = accessPath.BaseType;
     AssociatedTypeDecl *association = accessPath.Association;
-    wtable = emitAssociatedTypeWitnessTableRef(IGF, parent, association,
+
+    auto module = IGF.getSwiftModule();
+    auto sig = IGF.GenericEnv->getGenericSignature()->getCanonicalSignature();
+    auto builder = IGF.IGM.Context.getOrCreateArchetypeBuilder(sig, module);
+    auto outOfContextType = IGF.GenericEnv->mapTypeOutOfContext(module, archetype);
+    auto resolved = builder->resolveArchetype(outOfContextType);
+
+    AssociatedTypeDecl *requirementAssociation = nullptr;
+
+    for (auto equivalent : resolved->getEquivalenceClass()) {
+      auto conformsTo = equivalent->getConformsTo();
+
+      auto found = conformsTo.find(protocol);
+      if (found == conformsTo.end()) continue;
+      auto requirementSource = found->second;
+      if (requirementSource.getKind() != RequirementSource::Redundant) {
+        requirementAssociation = cast<AssociatedTypeDecl>(requirementSource.getDecl());
+        break;
+      }
+    }
+    assert(requirementAssociation && "failed to find explicit requirement");
+
+    Type protocolScopedType;
+
+    auto searcher = [&] (ArchetypeBuilder::PotentialArchetype *pat,
+                         ArrayRef<std::pair<ArchetypeBuilder::PotentialArchetype *, size_t>> path) {
+      auto possibleParent = pat->getParent();
+      // is this an associated type?
+      if (!possibleParent) return false;
+      // is this a member type of a type parameter?
+      if (possibleParent->getTypeInContext(*builder, IGF.GenericEnv).isConcreteType()) return false;
+
+      auto curAssociation = pat->getResolvedAssociatedType();
+      if (requirementAssociation == curAssociation) {
+        // walk down the path, constructing a Self.T.U.V reference.
+        protocolScopedType  = GenericTypeParamType::get(0, 0, IGF.IGM.Context);
+        for (auto pat : llvm::reverse(path)) {
+          protocolScopedType = DependentMemberType::get(protocolScopedType,
+                                                        pat.first->getResolvedAssociatedType());
+        }
+
+        return true;
+      }
+      return false;
+    };
+    assert((resolved->findParentIf(searcher)) && "failed to find parent that conforms to protocol");
+
+    wtable = emitAssociatedTypeWitnessTableRef(IGF, parent,
+                                               protocolScopedType.getCanonicalTypeOrNull(),
+                                               association,
                                                associatedMetadata,
                                                protocol);
 
@@ -339,6 +388,7 @@ llvm::Value *irgen::emitAssociatedTypeMetadataRef(IRGenFunction &IGF,
 llvm::Value *
 irgen::emitAssociatedTypeWitnessTableRef(IRGenFunction &IGF,
                                          CanArchetypeType origin,
+                                         CanType type,
                                          AssociatedTypeDecl *associate,
                                          llvm::Value *associateMetadata,
                                          ProtocolDecl *associateProtocol) {
@@ -360,7 +410,7 @@ irgen::emitAssociatedTypeWitnessTableRef(IRGenFunction &IGF,
 
   // FIXME: will this ever be an indirect requirement?
   return emitAssociatedTypeWitnessTableRef(IGF, originMetadata, wtable,
-                                           associate, associateMetadata,
+                                           type, associate, associateMetadata,
                                            associateProtocol);
 }
 

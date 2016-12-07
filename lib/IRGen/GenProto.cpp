@@ -39,6 +39,7 @@
 #include "swift/SIL/TypeLowering.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Support/Debug.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/Module.h"
@@ -1690,9 +1691,37 @@ const ProtocolInfo &TypeConverter::getProtocolInfo(ProtocolDecl *protocol) {
   if (Lowering::TypeConverter::protocolRequiresWitnessTable(protocol))
     layout.visitProtocolDecl(protocol);
 
+  ArchetypeBuilder builder(*protocol->getParentModule());
+
+  builder.addGenericSignature(protocol->getGenericSignature(),
+                              protocol->getGenericEnvironment(),
+                              protocol,
+                              true);
+
+  auto minimisedSignature = builder.getGenericSignature()->getCanonicalSignature();
+  // minimisedSignature->dump();
+
+  // The first requirement is something along the lines of Self: <this
+  // protocol>, and we don't need a witness table to store a pointer to itself.
+  auto requirements = minimisedSignature->getRequirements().drop_front();
+
+  size_t count = layout.getNumWitnesses();
+  SmallVector<WitnessTableConformanceEntry, 4> conformanceTable;
+  for (const auto& req : requirements) {
+    if (req.getKind() != RequirementKind::Conformance) continue;
+
+    auto ty = req.getFirstType()->getCanonicalType();
+    auto protocol = req.getSecondType()->castTo<ProtocolType>()->getDecl();
+    auto index = WitnessIndex(count, /* is prefix */ false);
+
+    conformanceTable.push_back(WitnessTableConformanceEntry(ty, protocol, index));
+  }
+
   // Create a ProtocolInfo object from the layout.
-  ProtocolInfo *info = ProtocolInfo::create(layout.getNumWitnesses(),
-                                            layout.getEntries());
+  ProtocolInfo *info = ProtocolInfo::create(count,
+                                            layout.getEntries(),
+                                            conformanceTable,
+                                            minimisedSignature);
   info->NextConverted = FirstProtocol;
   FirstProtocol = info;
 
@@ -1705,10 +1734,13 @@ const ProtocolInfo &TypeConverter::getProtocolInfo(ProtocolDecl *protocol) {
 
 /// Allocate a new ProtocolInfo.
 ProtocolInfo *ProtocolInfo::create(unsigned numWitnesses,
-                                   ArrayRef<WitnessTableEntry> table) {
-  size_t bufferSize = totalSizeToAlloc<WitnessTableEntry>(table.size());
+                                   ArrayRef<WitnessTableEntry> table,
+                                   ArrayRef<WitnessTableConformanceEntry> conformanceTable,
+                                   CanGenericSignature sig) {
+  size_t bufferSize = totalSizeToAlloc<WitnessTableEntry, WitnessTableConformanceEntry>(table.size(),
+                                                                                        conformanceTable.size());
   void *buffer = ::operator new(bufferSize);
-  return new(buffer) ProtocolInfo(numWitnesses, table);
+  return new(buffer) ProtocolInfo(numWitnesses, table, conformanceTable, sig);
 }
 
 ProtocolInfo::~ProtocolInfo() {
@@ -2878,18 +2910,61 @@ IRGenModule::getAssociatedTypeWitnessTableAccessFunctionTy() {
   return accessorTy;
 }
 
+static Type reparentDependentMemberTypeToProtocol(ProtocolDecl *knownProtocol,
+                                                  DependentMemberType *type,
+                                                  ASTContext &ctx) {
+  auto *assocType = type->getAssocType();
+  Type newBase;
+  if (assocType->getProtocol() == knownProtocol) {
+    newBase = GenericTypeParamType::get(0, 0, ctx);
+  } else {
+    auto *oldBase = type->getBase()->getAs<DependentMemberType>();
+    assert(oldBase && "reached non-DependentMemberType when searching for protocol");
+    newBase = reparentDependentMemberTypeToProtocol(knownProtocol, oldBase, ctx);
+  }
+  return DependentMemberType::get(newBase, assocType);
+}
+
 /// Call an associated-type witness table access function.  Does not do
 /// any caching or drill down to implied protocols.
 llvm::Value *
 irgen::emitAssociatedTypeWitnessTableRef(IRGenFunction &IGF,
                                          llvm::Value *parentMetadata,
                                          llvm::Value *wtable,
+                                         CanType type,
                                          AssociatedTypeDecl *associatedType,
                                          llvm::Value *associatedTypeMetadata,
                                          ProtocolDecl *associatedProtocol) {
-  auto &pi = IGF.IGM.getProtocolInfo(associatedType->getProtocol());
+
+  auto protocol = associatedType->getProtocol();
+  auto &pi = IGF.IGM.getProtocolInfo(protocol);
   auto index = pi.getWitnessEntry(associatedType)
                  .getAssociatedTypeWitnessTableIndex(associatedProtocol);
+
+  auto found = false;
+  auto conformanceTable = pi.getConformanceEntries();
+  // pi.Signature->dump();
+  // type->dump();
+  // reparentedType->dump();
+  // associatedProtocol->dump();
+  if (true || IGF.getSwiftModule()->getName().str() != "Swift") {
+  auto env = protocol->getGenericEnvironment();
+  auto module = IGF.getSwiftModule();
+  auto inContextType = env->mapTypeIntoContext(module, type)->getCanonicalType();
+
+  for (const auto &entry : conformanceTable) {
+    auto entryInContext = env->mapTypeIntoContext(module, entry.getType());
+    if (entryInContext->getCanonicalType() == inContextType && entry.getProtocol() == associatedProtocol)  {
+      // llvm::dbgs() << "found conformance at index " << entry.getIndex().getValue() << "\n";
+      found = true;
+      break;
+    }
+  }
+    assert(found);
+}
+  if (!found) {
+    // llvm::dbgs() << "failed to find conformance\n";
+  }
   llvm::Value *witness = emitInvariantLoadOfOpaqueWitness(IGF, wtable, index);
 
   // Cast the witness to the appropriate function type.

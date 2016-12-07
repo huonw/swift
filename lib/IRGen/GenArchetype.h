@@ -57,6 +57,7 @@ namespace irgen {
   /// associated type of an archetype.
   llvm::Value *emitAssociatedTypeWitnessTableRef(IRGenFunction &IGF,
                                                  CanArchetypeType origin,
+                                                 CanType type,
                                                  AssociatedTypeDecl *associate,
                                                  llvm::Value *associateMetadata,
                                                ProtocolDecl *associateProtocol);
