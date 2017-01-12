@@ -13,7 +13,8 @@
 import _SwiftDispatchOverlayShims
 
 public struct DispatchWorkItemFlags : OptionSet, RawRepresentable {
-	public let rawValue: UInt
+    public typealias Element = DispatchWorkItemFlags
+  public let rawValue: UInt
 	public init(rawValue: UInt) { self.rawValue = rawValue }
 
 	public static let barrier = DispatchWorkItemFlags(rawValue: 0x1)

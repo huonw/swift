@@ -317,7 +317,7 @@ public:
   /// signature are fully resolved).
   ///
   /// For any type that cannot refer to an archetype, this routine returns null.
-  PotentialArchetype *resolveArchetype(Type type);
+  PotentialArchetype *resolveArchetype(Type type, bool useAssociatedTypeDecl = false);
 
   /// \brief Dump all of the requirements, both specified and inferred.
   LLVM_ATTRIBUTE_DEPRECATED(
@@ -577,10 +577,16 @@ public:
     return *SameTypeSource;
   }
 
+private:
+  void insertNestedType(Identifier Name, PotentialArchetype *nested);
+
+public:
   /// \brief Retrieve (or create) a nested type with the given name.
   PotentialArchetype *getNestedType(Identifier Name,
                                     ArchetypeBuilder &builder);
 
+  PotentialArchetype *getNestedType(AssociatedTypeDecl *decl,
+                                    ArchetypeBuilder &builder);
 
   /// \brief Retrieve (or build) the type corresponding to the potential
   /// archetype within the given generic environment.

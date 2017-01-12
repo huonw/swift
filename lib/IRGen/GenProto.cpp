@@ -2947,7 +2947,7 @@ irgen::emitAssociatedTypeWitnessTableRef(IRGenFunction &IGF,
   // type->dump();
   // reparentedType->dump();
   // associatedProtocol->dump();
-  if (true || IGF.getSwiftModule()->getName().str() != "Swift") {
+  if (IGF.getSwiftModule()->getName().str() != "Swift") {
   auto env = protocol->getGenericEnvironment();
   auto module = IGF.getSwiftModule();
   auto inContextType = env->mapTypeIntoContext(module, type)->getCanonicalType();
@@ -2960,8 +2960,8 @@ irgen::emitAssociatedTypeWitnessTableRef(IRGenFunction &IGF,
       break;
     }
   }
-    assert(found);
-}
+  assert(found);
+  }
   if (!found) {
     // llvm::dbgs() << "failed to find conformance\n";
   }

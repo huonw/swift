@@ -24,7 +24,8 @@ internal class _DispatchSpecificValue<T> {
 }
 
 public extension DispatchQueue {
-	public struct Attributes : OptionSet {
+    public struct Attributes : OptionSet {
+        public typealias Element = Attributes
 		public let rawValue: UInt64
 		public init(rawValue: UInt64) { self.rawValue = rawValue }
 

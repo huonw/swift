@@ -17,14 +17,16 @@ public extension DispatchIO {
 		case random = 1
 	}
 
-	public struct CloseFlags : OptionSet, RawRepresentable {
+  public struct CloseFlags : OptionSet, RawRepresentable {
+      public typealias Element = CloseFlags
 		public let rawValue: UInt
 		public init(rawValue: UInt) { self.rawValue = rawValue }
 
 		public static let stop = CloseFlags(rawValue: 1)
 	}
 
-	public struct IntervalFlags : OptionSet, RawRepresentable {
+  public struct IntervalFlags : OptionSet, RawRepresentable {
+      public typealias Element = IntervalFlags
 		public let rawValue: UInt
 		public init(rawValue: UInt) { self.rawValue = rawValue }
 		public init(nilLiteral: ()) { self.rawValue = 0 }

@@ -13,7 +13,8 @@
 import StdlibUnittest
 
 public struct UTFTest {
-  public struct Flags : OptionSet {
+    public struct Flags : OptionSet {
+        public typealias Element = Flags
     public let rawValue: Int
 
     public init(rawValue: Int) {

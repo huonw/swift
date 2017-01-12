@@ -585,10 +585,12 @@ bool GenericSignature::isCanonicalTypeInContext(Type type,
 
   // Look for non-canonical type parameters.
   return !type.findIf([&](Type component) -> bool {
-    if (!component->isTypeParameter()) return false;
+    if (!component->isTypeParameter())
+      return false;
 
-    auto pa = builder.resolveArchetype(component);
-    if (!pa) return false;
+    auto pa = builder.resolveArchetype(component, true);
+    if (!pa)
+      return false;
 
     auto rep = pa->getArchetypeAnchor();
     return (rep->isConcreteType() || pa != rep);

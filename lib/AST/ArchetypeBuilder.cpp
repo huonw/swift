@@ -406,7 +406,69 @@ auto ArchetypeBuilder::PotentialArchetype::getArchetypeAnchor()
 
   return best;
 }
+void ArchetypeBuilder::PotentialArchetype::insertNestedType(Identifier nestedName,
+                                          PotentialArchetype *nestedPA) {
+  // If we have resolved this nested type to more than one associated
+  // type, create same-type constraints between them.
+  llvm::TinyPtrVector<PotentialArchetype *> &nested =
+    NestedTypes[nestedName];
+  if (!nested.empty()) {
+    auto existing = nested.front();
+    RequirementSource redundantSource(RequirementSource::Redundant,
+                                      SourceLoc(),
+                                      nullptr);
+    if (existing->getTypeAliasDecl() && !nestedPA->getTypeAliasDecl()) {
+      // If we found a typealias first, and now have an associatedtype
+      // with the same name, it was a Swift 2 style declaration of the
+      // type an inherited associatedtype should be bound to. In such a
+      // case we want to make sure the associatedtype is frontmost to
+      // generate generics/witness lists correctly, and the alias
+      // will be unused/useless for generic constraining anyway.
+      nested.insert(nested.begin(), nestedPA);
+    } else {
+      nested.push_back(nestedPA);
+    }
+  } else
+    nested.push_back(nestedPA);
+}
 
+auto ArchetypeBuilder::PotentialArchetype::getNestedType(
+    AssociatedTypeDecl *decl,
+    ArchetypeBuilder &builder) -> PotentialArchetype * {
+  // Retrieve the nested type from the representation of this set.
+  if (Representative != this)
+    return getRepresentative()->getNestedType(decl, builder);
+
+  auto nestedName = decl->getName();
+
+  auto hasConformance = false;
+  for (auto &conforms : ConformsTo) {
+    auto members = conforms.first->getMembers();
+    if (llvm::find(members, decl) != members.end()) {
+      hasConformance = true;
+      break;
+    }
+  }
+  assert(hasConformance && "getting nested associated type that doesn't exist");
+
+  for (auto nested : NestedTypes[nestedName]) {
+    if (nested->getParent() && nested->getResolvedAssociatedType() == decl) {
+      return nested;
+    }
+  }
+
+  auto pa = new PotentialArchetype(this, decl);
+
+  if (!NestedTypes[nestedName].empty()) {
+    RequirementSource redundantSource(RequirementSource::Redundant,
+                                      SourceLoc(),
+                                      decl);
+    builder.addSameTypeRequirementBetweenArchetypes(pa, NestedTypes[nestedName].front(),
+                                                    redundantSource);
+  }
+  insertNestedType(nestedName, pa);
+  return pa;
+}
 auto ArchetypeBuilder::PotentialArchetype::getNestedType(
        Identifier nestedName,
        ArchetypeBuilder &builder) -> PotentialArchetype * {
@@ -455,25 +517,7 @@ auto ArchetypeBuilder::PotentialArchetype::getNestedType(
       } else
         continue;
 
-      // If we have resolved this nested type to more than one associated
-      // type, create same-type constraints between them.
-      llvm::TinyPtrVector<PotentialArchetype *> &nested =
-          NestedTypes[nestedName];
-      if (!nested.empty()) {
-        auto existing = nested.front();
-        if (existing->getTypeAliasDecl() && !pa->getTypeAliasDecl()) {
-          // If we found a typealias first, and now have an associatedtype
-          // with the same name, it was a Swift 2 style declaration of the
-          // type an inherited associatedtype should be bound to. In such a
-          // case we want to make sure the associatedtype is frontmost to
-          // generate generics/witness lists correctly, and the alias
-          // will be unused/useless for generic constraining anyway.
-          nested.insert(nested.begin(), pa);
-        } else {
-          nested.push_back(pa);
-        }
-      } else
-        nested.push_back(pa);
+      insertNestedType(nestedName, pa);
 
       // If there's a superclass constraint that conforms to the protocol,
       // add the appropriate same-type relationship.
@@ -825,7 +869,7 @@ LazyResolver *ArchetypeBuilder::getLazyResolver() const {
   return Context.getLazyResolver();
 }
 
-auto ArchetypeBuilder::resolveArchetype(Type type) -> PotentialArchetype * {
+auto ArchetypeBuilder::resolveArchetype(Type type, bool useAssociatedTypeDecl) -> PotentialArchetype * {
   if (auto genericParam = type->getAs<GenericTypeParamType>()) {
     unsigned index = GenericParamKey(genericParam).findIndexIn(
                                                            Impl->GenericParams);
@@ -840,7 +884,11 @@ auto ArchetypeBuilder::resolveArchetype(Type type) -> PotentialArchetype * {
     if (!base)
       return nullptr;
 
-    return base->getNestedType(dependentMember->getName(), *this);
+    auto assocType = dependentMember->getAssocType();
+    if (assocType)
+      return base->getNestedType(assocType, *this);
+    else
+      return base->getNestedType(dependentMember->getName(), *this);
   }
 
   return nullptr;
@@ -931,7 +979,7 @@ bool ArchetypeBuilder::addConformanceRequirement(PotentialArchetype *PAT,
   for (auto Member : Proto->getMembers()) {
     if (auto AssocType = dyn_cast<AssociatedTypeDecl>(Member)) {
       // Add requirements placed directly on this associated type.
-      auto AssocPA = T->getNestedType(AssocType->getName(), *this);
+      auto AssocPA = T->getNestedType(AssocType, *this);
       auto Kind = Source.getKind() == RequirementSource::ProtocolSelf ?
         RequirementSource::Explicit : RequirementSource::Protocol;
 

@@ -506,12 +506,19 @@ static SmallVector<TupleTypeElt, 4> decomposeIntoTupleElements(Type type) {
 static AssociatedTypeDecl *
 getReferencedAssocTypeOfProtocol(Type type, ProtocolDecl *proto) {
   if (auto dependentMember = type->getAs<DependentMemberType>()) {
-    if (auto genericParam 
+    if (auto genericParam
           = dependentMember->getBase()->getAs<GenericTypeParamType>()) {
       if (genericParam->getDepth() == 0 && genericParam->getIndex() == 0) {
-        if (auto assocType = dependentMember->getAssocType()) {
+        /*if (auto assocType = dependentMember->getAssocType()) {
           if (assocType->getDeclContext() == proto)
             return assocType;
+            }*/
+
+        for (auto decl : proto->getMembers()) {
+          if (auto assocType = dyn_cast<AssociatedTypeDecl>(decl)) {
+            if (assocType->getName() == dependentMember->getName())
+              return assocType;
+          }
         }
       }
     }
@@ -3318,6 +3325,56 @@ void ConformanceChecker::resolveTypeWitnesses() {
     }
   }
 
+  // Try to resolve the unresolved types in any more specific protocols that
+  // contain associated types of the same name. Redeclared associated types like
+  // that are implicitly all the same
+  auto conformingType = Conformance->getType();
+  auto protocols = conformingType->getAnyNominal()->getAllProtocols();
+  auto DC = Conformance->getDeclContext();
+  auto module = DC->getParentModule();
+  unresolvedAssocTypes.remove_if([&] (AssociatedTypeDecl * assocType) {
+      SmallVector<AssociatedTypeDecl *, 4> associatedTypesWithSameName;
+      for (auto protocol : protocols) {
+        for (auto member : protocol->lookupDirect(assocType->getName())) {
+          if (auto ATD = dyn_cast<AssociatedTypeDecl>(member))
+            associatedTypesWithSameName.push_back(ATD);
+        }
+      }
+      assert(!associatedTypesWithSameName.empty() && "should have found at least current protocol");
+      std::stable_sort(associatedTypesWithSameName.begin(),
+                       associatedTypesWithSameName.end(),
+                       [&](AssociatedTypeDecl *LHSAssoc, AssociatedTypeDecl *RHSAssoc) {
+                         auto LHS = LHSAssoc->getProtocol();
+                         auto RHS = RHSAssoc->getProtocol();
+                         if (LHS->inheritsFrom(RHS)) {
+                           return true;
+                         } else if (RHS->inheritsFrom(LHS)) {
+                           return false;
+                         } else {
+                           return ProtocolType::compareProtocols(&LHS, &RHS) < 0;
+                         }
+                       });
+      // FIXME: prefer current protocol over topologically equivalent ones
+      // (e.g. two protocols without inheritance)
+      auto chosenAssocType = associatedTypesWithSameName[0];
+      auto chosenProtocol = chosenAssocType->getProtocol();
+
+      // There's nothing more specific to drive inference, so this is the right
+      // choice: keep it in the vector of things to infer.
+      if (chosenProtocol == Proto) return false;
+
+      auto conformance = module->lookupConformance(conformingType,
+                                                   chosenProtocol,
+                                                   &TC)
+        ->getConcrete();
+
+      auto substAndDecl = conformance->getTypeWitnessSubstAndDecl(chosenAssocType, &TC);
+      recordTypeWitness(assocType, substAndDecl.first.getReplacement(),
+                        substAndDecl.second, true);
+
+      return true;
+    });
+
   // If we resolved everything, we're done.
   if (unresolvedAssocTypes.empty())
     return;
@@ -4035,7 +4092,7 @@ void ConformanceChecker::resolveSingleWitness(ValueDecl *requirement) {
   // If any of the type witnesses was erroneous, don't bother to check
   // this value witness: it will fail.
   for (auto assocType : getReferencedAssociatedTypes(requirement)) {
-    if (Conformance->getTypeWitness(assocType, nullptr).getReplacement()
+    if (Conformance->getTypeWitness(assocType, &TC).getReplacement()
           ->hasError()) {
       Conformance->setInvalid();
       return;

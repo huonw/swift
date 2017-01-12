@@ -99,14 +99,16 @@ public extension DispatchSourceProtocol {
 }
 
 public extension DispatchSource {
-	public struct MachSendEvent : OptionSet, RawRepresentable {
+    public struct MachSendEvent : OptionSet, RawRepresentable {
+        public typealias Element = MachSendEvent
 		public let rawValue: UInt
 		public init(rawValue: UInt) { self.rawValue = rawValue }
 
 		public static let dead = MachSendEvent(rawValue: 0x1)
 	}
 
-	public struct MemoryPressureEvent : OptionSet, RawRepresentable {
+    public struct MemoryPressureEvent : OptionSet, RawRepresentable {
+        public typealias Element = MemoryPressureEvent
 		public let rawValue: UInt
 		public init(rawValue: UInt) { self.rawValue = rawValue }
 
@@ -116,7 +118,8 @@ public extension DispatchSource {
 		public static let all: MemoryPressureEvent = [.normal, .warning, .critical]
 	}
 
-	public struct ProcessEvent : OptionSet, RawRepresentable {
+    public struct ProcessEvent : OptionSet, RawRepresentable {
+        public typealias Element = ProcessEvent
 		public let rawValue: UInt
 		public init(rawValue: UInt) { self.rawValue = rawValue }
 
@@ -127,14 +130,16 @@ public extension DispatchSource {
 		public static let all: ProcessEvent = [.exit, .fork, .exec, .signal]
 	}
 
-	public struct TimerFlags : OptionSet, RawRepresentable {
+    public struct TimerFlags : OptionSet, RawRepresentable {
+        public typealias Element = TimerFlags
 		public let rawValue: UInt
 		public init(rawValue: UInt) { self.rawValue = rawValue }
 
 		public static let strict = TimerFlags(rawValue: 1)
 	}
 
-	public struct FileSystemEvent : OptionSet, RawRepresentable {
+    public struct FileSystemEvent : OptionSet, RawRepresentable {
+        public typealias Element = FileSystemEvent
 		public let rawValue: UInt
 		public init(rawValue: UInt) { self.rawValue = rawValue }
 

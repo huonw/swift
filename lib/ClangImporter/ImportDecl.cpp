@@ -4846,6 +4846,15 @@ SwiftDeclConverter::importAsOptionSetType(DeclContext *dc, Identifier name,
   ProtocolDecl *protocols[] = {cxt.getProtocol(KnownProtocolKind::OptionSet)};
   makeStructRawValued(Impl, structDecl, underlyingType,
                       {KnownProtocolKind::OptionSet}, protocols);
+
+  TypeAliasDecl *typeAlias = new (cxt) TypeAliasDecl(SourceLoc(),
+                                                     cxt.getIdentifier("Element"),
+                                                     SourceLoc(),
+                                                     TypeLoc::withoutLoc(structDecl->getDeclaredType()),
+                                                     nullptr, structDecl);
+  typeAlias->setAccessibility(Accessibility::Public);
+  structDecl->addMember(typeAlias);
+
   return structDecl;
 }
 
