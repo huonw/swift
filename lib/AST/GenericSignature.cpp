@@ -597,6 +597,15 @@ bool GenericSignature::isCanonicalTypeInContext(Type type,
   });
 }
 
+static ArchetypeBuilder::PotentialArchetype *canonicalizePA(ArchetypeBuilder::PotentialArchetype *pa, ArchetypeBuilder &builder) {
+  auto parent = pa->getParent();
+  if (!parent) return pa->getArchetypeAnchor();
+
+  auto base = canonicalizePA(parent, builder);
+  auto rep = base->getNestedType(pa->getResolvedAssociatedType(), builder);
+  return rep->getArchetypeAnchor();
+}
+
 CanType GenericSignature::getCanonicalTypeInContext(Type type,
                                                     ArchetypeBuilder &builder) {
   type = type->getCanonicalType();
@@ -615,7 +624,7 @@ CanType GenericSignature::getCanonicalTypeInContext(Type type,
     auto pa = builder.resolveArchetype(component);
     if (!pa) return component;
 
-    auto rep = pa->getArchetypeAnchor();
+    auto rep = canonicalizePA(pa, builder); //pa->getArchetypeAnchor();
     if (rep->isConcreteType()) {
       return getCanonicalTypeInContext(rep->getConcreteType(), builder);
     } else {

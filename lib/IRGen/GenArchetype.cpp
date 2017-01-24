@@ -16,7 +16,9 @@
 
 #include "GenArchetype.h"
 
+#include "swift/AST/ArchetypeBuilder.h"
 #include "swift/AST/ASTContext.h"
+#include "swift/AST/GenericEnvironment.h"
 #include "swift/AST/Types.h"
 #include "swift/AST/Decl.h"
 #include "swift/SIL/SILValue.h"
@@ -209,7 +211,7 @@ public:
     auto module = IGF.getSwiftModule();
     auto sig = IGF.GenericEnv->getGenericSignature()->getCanonicalSignature();
     auto builder = IGF.IGM.Context.getOrCreateArchetypeBuilder(sig, module);
-    auto outOfContextType = IGF.GenericEnv->mapTypeOutOfContext(module, archetype);
+    auto outOfContextType = IGF.GenericEnv->mapTypeOutOfContext(archetype);
     auto resolved = builder->resolveArchetype(outOfContextType);
 
     AssociatedTypeDecl *requirementAssociation = nullptr;
@@ -235,7 +237,7 @@ public:
       // is this an associated type?
       if (!possibleParent) return false;
       // is this a member type of a type parameter?
-      if (possibleParent->getTypeInContext(*builder, IGF.GenericEnv).isConcreteType()) return false;
+      if (possibleParent->isConcreteType()) return false;
 
       auto curAssociation = pat->getResolvedAssociatedType();
       if (requirementAssociation == curAssociation) {
@@ -253,7 +255,7 @@ public:
     assert((resolved->findParentIf(searcher)) && "failed to find parent that conforms to protocol");
 
     wtable = emitAssociatedTypeWitnessTableRef(IGF, parent,
-                                               protocolScopedType.getCanonicalTypeOrNull(),
+                                               protocolScopedType ? protocolScopedType->getCanonicalType() : CanType(),
                                                association,
                                                associatedMetadata,
                                                protocol);

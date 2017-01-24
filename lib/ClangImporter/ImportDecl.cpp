@@ -4850,8 +4850,8 @@ SwiftDeclConverter::importAsOptionSetType(DeclContext *dc, Identifier name,
   TypeAliasDecl *typeAlias = new (cxt) TypeAliasDecl(SourceLoc(),
                                                      cxt.getIdentifier("Element"),
                                                      SourceLoc(),
-                                                     TypeLoc::withoutLoc(structDecl->getDeclaredType()),
                                                      nullptr, structDecl);
+  typeAlias->setUnderlyingType(structDecl->getDeclaredType());
   typeAlias->setAccessibility(Accessibility::Public);
   structDecl->addMember(typeAlias);
 

@@ -3350,9 +3350,22 @@ void ConformanceChecker::resolveTypeWitnesses() {
                            return true;
                          } else if (RHS->inheritsFrom(LHS)) {
                            return false;
-                         } else {
-                           return ProtocolType::compareProtocols(&LHS, &RHS) < 0;
                          }
+
+                         if (LHS == Proto)
+                           return true;
+                         else if (RHS == Proto)
+                           return false;
+
+                         if (LHS->inheritsFrom(Proto)) {
+                           if (!RHS->inheritsFrom(Proto)) {
+                             return true;
+                           }
+                         } else if (RHS->inheritsFrom(Proto)) {
+                           return false;
+                         }
+
+                         return ProtocolType::compareProtocols(&LHS, &RHS) < 0;
                        });
       // FIXME: prefer current protocol over topologically equivalent ones
       // (e.g. two protocols without inheritance)

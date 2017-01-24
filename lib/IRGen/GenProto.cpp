@@ -27,8 +27,10 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "swift/AST/ArchetypeBuilder.h"
 #include "swift/AST/ASTContext.h"
 #include "swift/AST/CanTypeVisitor.h"
+#include "swift/AST/GenericEnvironment.h"
 #include "swift/AST/Types.h"
 #include "swift/AST/Decl.h"
 #include "swift/AST/IRGenOptions.h"
@@ -1691,10 +1693,10 @@ const ProtocolInfo &TypeConverter::getProtocolInfo(ProtocolDecl *protocol) {
   if (Lowering::TypeConverter::protocolRequiresWitnessTable(protocol))
     layout.visitProtocolDecl(protocol);
 
-  ArchetypeBuilder builder(*protocol->getParentModule());
+  ArchetypeBuilder builder(protocol->getASTContext(),
+                           LookUpConformanceInModule(protocol->getModuleContext()));
 
   builder.addGenericSignature(protocol->getGenericSignature(),
-                              protocol->getGenericEnvironment(),
                               protocol,
                               true);
 
