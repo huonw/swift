@@ -64,9 +64,9 @@ SILWitnessTable::create(SILModule &M, SILLinkage Linkage, bool IsFragile,
   Identifier Name = M.getASTContext().getIdentifier(mangleConstant(Conformance));
 
   // Allocate the witness table and initialize it.
-  void *buf = M.allocate(sizeof(SILWitnessTable), alignof(SILWitnessTable));
-  SILWitnessTable *wt = ::new (buf) SILWitnessTable(M, Linkage, IsFragile,
-                                           Name.str(), Conformance, entries);
+  auto *buf = M.allocate<SILWitnessTable>(1);
+  SILWitnessTable *wt = ::new (buf)
+      SILWitnessTable(M, Linkage, IsFragile, Name.str(), Conformance, entries);
 
   wt->addWitnessTable();
 
@@ -85,7 +85,7 @@ SILWitnessTable::create(SILModule &M, SILLinkage Linkage,
 
 
   // Allocate the witness table and initialize it.
-  void *buf = M.allocate(sizeof(SILWitnessTable), alignof(SILWitnessTable));
+  auto *buf = M.allocate<SILWitnessTable>(1);
   SILWitnessTable *wt = ::new (buf) SILWitnessTable(M, Linkage, Name.str(),
                                                     Conformance);
 
@@ -125,6 +125,7 @@ SILWitnessTable::~SILWitnessTable() {
     case AssociatedType:
     case AssociatedTypeProtocol:
     case BaseProtocol:
+    case ConformanceRequirement:
     case MissingOptional:
     case Invalid:
       break;
@@ -150,6 +151,7 @@ void SILWitnessTable::convertToDefinition(ArrayRef<Entry> entries,
       break;
     case AssociatedType:
     case AssociatedTypeProtocol:
+    case ConformanceRequirement:
     case BaseProtocol:
     case MissingOptional:
     case Invalid:

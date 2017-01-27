@@ -137,6 +137,7 @@ namespace sil_block {
     SIL_WITNESS_METHOD_ENTRY,
     SIL_WITNESS_BASE_ENTRY,
     SIL_WITNESS_ASSOC_PROTOCOL,
+    SIL_WITNESS_CONFORMANCE_REQUIREMENT,
     SIL_WITNESS_ASSOC_ENTRY,
     SIL_DEFAULT_WITNESS_TABLE,
     SIL_DEFAULT_WITNESS_TABLE_ENTRY,
@@ -201,6 +202,14 @@ namespace sil_block {
   using WitnessAssocProtocolLayout = BCRecordLayout<
     SIL_WITNESS_ASSOC_PROTOCOL,
     DeclIDField, // ID of AssociatedTypeDecl
+    DeclIDField  // ID of ProtocolDecl
+    // Trailed by the conformance itself if appropriate.
+  >;
+
+  using WitnessConformanceRequirementLayout = BCRecordLayout<
+    SIL_WITNESS_CONFORMANCE_REQUIREMENT,
+    TypeIDField, // ID of ConformingTypeInProtocol
+    TypeIDField, // ID of ConformingTypeInConformance
     DeclIDField  // ID of ProtocolDecl
     // Trailed by the conformance itself if appropriate.
   >;

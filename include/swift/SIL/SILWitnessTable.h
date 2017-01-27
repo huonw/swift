@@ -85,7 +85,24 @@ public:
     /// The witness for the optional requirement that wasn't present.
     ValueDecl *Witness;
   };
-  
+
+  /// A witness table entry for describing the witness for any conformance
+  /// requirement introduced by this protocol.
+  struct ConformanceRequirementWitness {
+    /// The type which has the conformance, in the context of the protocol
+    /// declaration.
+    CanType TypeInProtocol;
+    /// The concrete type which has the conformance, in the context of the
+    /// conformance itself (the type or extension decl). (This needs to be
+    /// stored separately, because the Witness conformance may be abstract.)
+    CanType TypeInConformance;
+    // The protocol requirement / on the type.
+    ProtocolDecl *Protocol;
+    /// The ProtocolConformance satisfying the requirement. Null if the
+    /// conformance is dependent.
+    ProtocolConformanceRef Witness;
+  };
+
   /// A witness table entry kind.
   enum WitnessKind {
     Invalid,
@@ -93,9 +110,10 @@ public:
     AssociatedType,
     AssociatedTypeProtocol,
     BaseProtocol,
-    MissingOptional
+    MissingOptional,
+    ConformanceRequirement
   };
-  
+
   /// A witness table entry.
   class Entry {
     WitnessKind Kind;
@@ -105,6 +123,7 @@ public:
       AssociatedTypeProtocolWitness AssociatedTypeProtocol;
       BaseProtocolWitness BaseProtocol;
       MissingOptionalWitness MissingOptional;
+      ConformanceRequirementWitness ConformanceRequirement;
     };
     
   public:
@@ -131,7 +150,11 @@ public:
     Entry(const MissingOptionalWitness &MissingOptional)
       : Kind(WitnessKind::MissingOptional), MissingOptional(MissingOptional) {
     }
-    
+
+    Entry(const ConformanceRequirementWitness &ConformanceRequirement)
+        : Kind(WitnessKind::ConformanceRequirement),
+          ConformanceRequirement(ConformanceRequirement) {}
+
     WitnessKind getKind() const { return Kind; }
     
     const MethodWitness &getMethodWitness() const {
@@ -155,6 +178,12 @@ public:
     const MissingOptionalWitness &getMissingOptionalWitness() const {
       assert(Kind == WitnessKind::MissingOptional);
       return MissingOptional;
+    }
+
+    const ConformanceRequirementWitness &
+    getConformanceRequirementWitness() const {
+      assert(Kind == WitnessKind::ConformanceRequirement);
+      return ConformanceRequirement;
     }
 
     void removeWitnessMethod() {

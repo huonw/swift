@@ -2271,6 +2271,21 @@ void SILWitnessTable::print(llvm::raw_ostream &OS, bool Verbose) const {
          << "': <<not present>>";
       break;
     }
+    case ConformanceRequirement: {
+      // conformance_requirement (Type: Protocol): <conformance>
+      auto confReqWitness = witness.getConformanceRequirementWitness();
+      OS << "conformance_requirement (";
+      confReqWitness.TypeInProtocol->print(OS, PrintOptions::printSIL());
+      OS << " = ";
+      confReqWitness.TypeInConformance->print(OS, PrintOptions::printSIL());
+      OS << ": " << confReqWitness.Protocol->getName() << "): ";
+
+      if (confReqWitness.Witness.isConcrete())
+        confReqWitness.Witness.getConcrete()->printName(OS, Options);
+      else
+        OS << "dependent";
+      break;
+    }
     }
     OS << '\n';
   }

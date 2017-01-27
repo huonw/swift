@@ -2366,6 +2366,18 @@ SILWitnessTable *SILDeserializer::readWitnessTable(DeclID WId,
         cast<AssociatedTypeDecl>(MF->getDecl(assocId)), proto,
         conformance
       });
+    } else if (kind == SIL_WITNESS_CONFORMANCE_REQUIREMENT) {
+      TypeID tyInProtocolId;
+      TypeID tyInConformanceId;
+      DeclID protoId;
+      WitnessConformanceRequirementLayout::readRecord(
+          scratch, tyInProtocolId, tyInConformanceId, protoId);
+      ProtocolDecl *proto = cast<ProtocolDecl>(MF->getDecl(protoId));
+      auto conformance = MF->readConformance(SILCursor);
+      witnessEntries.push_back(SILWitnessTable::ConformanceRequirementWitness{
+          MF->getType(tyInProtocolId)->getCanonicalType(),
+          MF->getType(tyInConformanceId)->getCanonicalType(), proto,
+          conformance});
     } else if (kind == SIL_WITNESS_ASSOC_ENTRY) {
       DeclID assocId;
       TypeID tyId;

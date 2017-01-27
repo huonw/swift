@@ -1803,7 +1803,8 @@ void SILSerializer::writeSILWitnessTable(const SILWitnessTable &wt) {
     return;
 
   for (auto &entry : wt.getEntries()) {
-    if (entry.getKind() == SILWitnessTable::BaseProtocol) {
+    switch (entry.getKind()) {
+    case SILWitnessTable::BaseProtocol: {
       auto &baseWitness = entry.getBaseProtocolWitness();
 
       WitnessBaseEntryLayout::emitRecord(Out, ScratchRecord,
@@ -1811,9 +1812,9 @@ void SILSerializer::writeSILWitnessTable(const SILWitnessTable &wt) {
           S.addDeclRef(baseWitness.Requirement));
 
       S.writeConformance(baseWitness.Witness, SILAbbrCodes);
-      continue;
+      break;
     }
-    if (entry.getKind() == SILWitnessTable::AssociatedTypeProtocol) {
+    case SILWitnessTable::AssociatedTypeProtocol: {
       auto &assoc = entry.getAssociatedTypeProtocolWitness();
 
       WitnessAssocProtocolLayout::emitRecord(
@@ -1823,29 +1824,48 @@ void SILSerializer::writeSILWitnessTable(const SILWitnessTable &wt) {
         S.addDeclRef(assoc.Protocol));
           
       S.writeConformance(assoc.Witness, SILAbbrCodes);
-      continue;
+      break;
     }
-    if (entry.getKind() == SILWitnessTable::AssociatedType) {
+    case SILWitnessTable::ConformanceRequirement: {
+      auto &confReq = entry.getConformanceRequirementWitness();
+
+      WitnessConformanceRequirementLayout::emitRecord(
+          Out, ScratchRecord,
+          SILAbbrCodes[WitnessConformanceRequirementLayout::Code],
+          S.addTypeRef(confReq.TypeInProtocol),
+          S.addTypeRef(confReq.TypeInConformance),
+          S.addDeclRef(confReq.Protocol));
+
+      S.writeConformance(confReq.Witness, SILAbbrCodes);
+      break;
+    }
+    case SILWitnessTable::AssociatedType: {
       auto &assoc = entry.getAssociatedTypeWitness();
       WitnessAssocEntryLayout::emitRecord(Out, ScratchRecord,
           SILAbbrCodes[WitnessAssocEntryLayout::Code],
           S.addDeclRef(assoc.Requirement),
           S.addTypeRef(assoc.Witness));
-      continue;
+      break;
     }
-    auto &methodWitness = entry.getMethodWitness();
-    SmallVector<ValueID, 4> ListOfValues;
-    handleSILDeclRef(S, methodWitness.Requirement, ListOfValues);
-    IdentifierID witnessID = 0;
-    if (SILFunction *witness = methodWitness.Witness) {
-      addReferencedSILFunction(witness, true);
-      witnessID = S.addIdentifierRef(Ctx.getIdentifier(witness->getName()));
+    case SILWitnessTable::Method: {
+      auto &methodWitness = entry.getMethodWitness();
+      SmallVector<ValueID, 4> ListOfValues;
+      handleSILDeclRef(S, methodWitness.Requirement, ListOfValues);
+      IdentifierID witnessID = 0;
+      if (SILFunction *witness = methodWitness.Witness) {
+        addReferencedSILFunction(witness, true);
+        witnessID = S.addIdentifierRef(Ctx.getIdentifier(witness->getName()));
+      }
+      WitnessMethodEntryLayout::emitRecord(
+          Out, ScratchRecord, SILAbbrCodes[WitnessMethodEntryLayout::Code],
+          // SILFunction name
+          witnessID, ListOfValues);
+      break;
     }
-    WitnessMethodEntryLayout::emitRecord(Out, ScratchRecord,
-        SILAbbrCodes[WitnessMethodEntryLayout::Code],
-        // SILFunction name
-        witnessID,
-        ListOfValues);
+    case SILWitnessTable::Invalid:
+    case SILWitnessTable::MissingOptional:
+      llvm_unreachable("writing impossible witness table kind");
+    }
   }
 }
 
@@ -1924,6 +1944,7 @@ void SILSerializer::writeSILBlock(const SILModule *SILMod) {
   registerSILAbbr<WitnessMethodEntryLayout>();
   registerSILAbbr<WitnessBaseEntryLayout>();
   registerSILAbbr<WitnessAssocProtocolLayout>();
+  registerSILAbbr<WitnessConformanceRequirementLayout>();
   registerSILAbbr<WitnessAssocEntryLayout>();
   registerSILAbbr<DefaultWitnessTableLayout>();
   registerSILAbbr<DefaultWitnessTableEntryLayout>();

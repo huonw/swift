@@ -180,6 +180,13 @@ protected:
             ensureAliveConformance(CRef.getConcrete());
           break;
         }
+        case SILWitnessTable::ConformanceRequirement: {
+          ProtocolConformanceRef CRef =
+              entry.getConformanceRequirementWitness().Witness;
+          if (CRef.isConcrete())
+            ensureAliveConformance(CRef.getConcrete());
+          break;
+        }
         case SILWitnessTable::BaseProtocol:
           ensureAliveConformance(entry.getBaseProtocolWitness().Witness);
           break;

@@ -298,6 +298,10 @@ void ConformanceCollector::scanConformance(ProtocolConformance *C) {
         scanType(entry.getAssociatedTypeWitness().Witness);
         break;
 
+      case SILWitnessTable::ConformanceRequirement:
+        scanConformance(entry.getConformanceRequirementWitness().Witness);
+        break;
+
       case SILWitnessTable::Method:
       case SILWitnessTable::Invalid:
       case SILWitnessTable::MissingOptional:
