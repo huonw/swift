@@ -269,6 +269,7 @@ extension InternalProtocol {
 // CHECK-NEXT:    no_default
 // CHECK-NEXT:    no_default
 // CHECK-NEXT:    method #ResilientMethods.staticDefaultWitness!1: @_T019protocol_resilience16ResilientMethodsP20staticDefaultWitnessxSiFZ
+// CHECK-NEXT:    no_default
 // CHECK-NEXT: }
 
 // CHECK-LABEL: sil_default_witness_table ResilientConstructors {
@@ -299,6 +300,7 @@ extension InternalProtocol {
 // CHECK-NEXT:   method #ResilientStorage.mutatingGetterWithNonMutatingDefault!getter.1: @_T019protocol_resilience16ResilientStorageP36mutatingGetterWithNonMutatingDefaultSifg
 // CHECK-NEXT:   method #ResilientStorage.mutatingGetterWithNonMutatingDefault!setter.1: @_T019protocol_resilience16ResilientStorageP36mutatingGetterWithNonMutatingDefaultSifs
 // CHECK-NEXT:   method #ResilientStorage.mutatingGetterWithNonMutatingDefault!materializeForSet.1: @_T019protocol_resilience16ResilientStorageP36mutatingGetterWithNonMutatingDefaultSifm
+// CHECK-NEXT:   no_default
 // CHECK-NEXT: }
 
 // CHECK-LABEL: sil_default_witness_table ResilientOperators {
@@ -308,6 +310,7 @@ extension InternalProtocol {
 // CHECK-NEXT:    method #ResilientOperators."<*>"!1: @_T019protocol_resilience18ResilientOperatorsP3lmgoiyx_qd__tlFZ
 // CHECK-NEXT:    method #ResilientOperators."<**>"!1: @_T019protocol_resilience18ResilientOperatorsP4lmmgoi9AssocTypeQzqd___xtlFZ
 // CHECK-NEXT:    method #ResilientOperators."<===>"!1: @_T019protocol_resilience18ResilientOperatorsP5leeegoi9AssocTypeQyd__qd___xtAaBRd__lFZ
+// CHECK-NEXT:    no_default
 // CHECK-NEXT: }
 
 // CHECK-LABEL: sil_default_witness_table ReabstractSelfRefined {
@@ -315,6 +318,7 @@ extension InternalProtocol {
 // CHECK-NEXT:   method #ReabstractSelfRefined.callback!getter.1: @_T019protocol_resilience21ReabstractSelfRefinedP8callbackxxcfg
 // CHECK-NEXT:   method #ReabstractSelfRefined.callback!setter.1: @_T019protocol_resilience21ReabstractSelfRefinedP8callbackxxcfs
 // CHECK-NEXT:   method #ReabstractSelfRefined.callback!materializeForSet.1: @_T019protocol_resilience21ReabstractSelfRefinedP8callbackxxcfm
+// CHECK-NEXT:   no_default
 // CHECK-NEXT: }
 
 // CHECK-LABEL: sil_default_witness_table hidden InternalProtocol {

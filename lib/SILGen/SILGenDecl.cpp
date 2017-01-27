@@ -1472,6 +1472,8 @@ public:
     auto *proto = Conformance->getProtocol();
     visitProtocolDecl(proto);
 
+    emitConformanceRequirements();
+
     // Serialize the witness table in two cases:
     // 1) We're serializing everything
     // 2) The type has a fixed layout in all resilience domains, and the
@@ -1627,6 +1629,50 @@ public:
   void visitAbstractStorageDecl(AbstractStorageDecl *d) {
     Witness witness = Conformance->getWitness(d, nullptr);
     addAbstractStorageDecl(d, witness);
+  }
+
+private:
+  void emitConformanceRequirements() {
+    auto *proto = Conformance->getProtocol();
+
+    auto sig = proto->getRequirementSignature()->getCanonicalSignature();
+
+    for (auto req : sig->getRequirements()) {
+      if (req.getKind() != RequirementKind::Conformance)
+        continue;
+
+      // This type is something like Self (for super-protocol requirements) or
+      // Self.X. In particular, it is in the context of the protocol, not the
+      // type we're computing the witness table for, but we need the latter to
+      // get a conformance, so let's substitute.
+      auto conformingTypeInProtocol = req.getFirstType()->getCanonicalType();
+
+      auto conformsToProtocol =
+          req.getSecondType()->castTo<ProtocolType>()->getDecl();
+
+      if (!Lowering::TypeConverter::protocolRequiresWitnessTable(
+              conformsToProtocol))
+        continue;
+
+      auto self = cast<GenericTypeParamType>(
+          proto->getSelfInterfaceType()->getCanonicalType());
+      auto concreteSelf = Conformance->getType()->getCanonicalType();
+      SubstitutionMap subMap;
+      subMap.addSubstitution(self, concreteSelf);
+      subMap.addConformance(self, ProtocolConformanceRef(Conformance));
+
+      // everything is in order, so we can substitute and also find the
+      // conformance
+      auto conformingTypeInConformance = conformingTypeInProtocol.subst(subMap);
+      auto conformance = subMap.lookupConformance(conformingTypeInProtocol,
+                                                  conformsToProtocol);
+      assert(conformance && "failed to find requirement's conformance");
+
+      Entries.push_back(SILWitnessTable::ConformanceRequirementWitness{
+          conformingTypeInProtocol,
+          conformingTypeInConformance->getCanonicalType(), conformsToProtocol,
+          *conformance});
+    }
   }
 };
 
@@ -1972,6 +2018,24 @@ public:
 
     addAbstractStorageDecl(d, witness);
   }
+
+  void emitConformanceRequirements() {
+    auto sig = Proto->getRequirementSignature()->getCanonicalSignature();
+
+    for (auto req : sig->getRequirements()) {
+      if (req.getKind() != RequirementKind::Conformance)
+        continue;
+
+      auto conformsToProtocol =
+          req.getSecondType()->castTo<ProtocolType>()->getDecl();
+
+      if (!Lowering::TypeConverter::protocolRequiresWitnessTable(
+              conformsToProtocol))
+        continue;
+
+      addMissingDefault();
+    }
+  }
 };
 
 } // end anonymous namespace
@@ -1982,6 +2046,7 @@ void SILGenModule::emitDefaultWitnessTable(ProtocolDecl *protocol) {
 
   SILGenDefaultWitnessTable builder(*this, protocol, linkage);
   builder.visitProtocolDecl(protocol);
+  builder.emitConformanceRequirements();
 
   SILDefaultWitnessTable *defaultWitnesses =
       M.createDefaultWitnessTableDeclaration(protocol, linkage);

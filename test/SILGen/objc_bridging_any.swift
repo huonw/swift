@@ -611,4 +611,6 @@ class AnyHashableClass : NSObject {
 // CHECK-NEXT: base_protocol _Hashable: GenericOption: _Hashable module objc_generics
 // CHECK-NEXT: base_protocol Equatable: GenericOption: Equatable module objc_generics
 // CHECK-NEXT: method #Hashable.hashValue!getter.1: @_TTWVSC13GenericOptions8Hashable13objc_genericsFS0_g9hashValueSi
+// CHECK-NEXT: conformance_requirement (τ_0_0 = GenericOption: Equatable): GenericOption: Equatable module objc_generics
+// CHECK-NEXT: conformance_requirement (τ_0_0 = GenericOption: _Hashable): GenericOption: _Hashable module objc_generics
 // CHECK-NEXT: }
