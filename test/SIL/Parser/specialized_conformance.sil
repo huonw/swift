@@ -31,6 +31,8 @@ sil_witness_table hidden <T where T : Inner> Generic<T>: Inner module sil {
 sil_witness_table hidden <U where U : Outer> Concrete<U>: Outer module sil {
   associated_type T: Generic<U.T>
   associated_type_protocol (T: Inner): Generic<U.T>: specialize <U.T> (<T where T : Inner> Generic<T>: Inner module main)
+  // FIXME: this doesn't parse
+  conformance_requirement (τ_0_0.T = Generic<τ_0_0.T>: Inner): Generic<U.T>: specialize <U.T> (<T where T : Inner> Generic<T>: Inner module main)
 }
 
 sil_default_witness_table hidden Inner {
@@ -39,9 +41,11 @@ sil_default_witness_table hidden Inner {
 sil_default_witness_table hidden Outer {
   no_default
   no_default
+  no_default
 }
 
 sil_default_witness_table hidden Another {
+  no_default
   no_default
   no_default
 }

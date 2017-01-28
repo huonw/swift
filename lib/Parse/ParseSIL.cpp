@@ -4643,6 +4643,8 @@ ProtocolConformance *SILParser::parseProtocolConformanceHelper(
 ///   associated_type_protocol (AssocName: ProtocolName):
 ///                              protocol-conformance|dependent
 ///   base_protocol ProtocolName: protocol-conformance
+///   conformance_requirement (Type == Type: ProtocolName):
+///                              protocol-conformance|dependent
 bool Parser::parseSILWitnessTable() {
   consumeToken(tok::kw_sil_witness_table);
   SILParser WitnessState(*this);
@@ -4710,8 +4712,9 @@ bool Parser::parseSILWitnessTable() {
       Identifier EntryKeyword;
       SourceLoc KeywordLoc;
       if (parseIdentifier(EntryKeyword, KeywordLoc,
-            diag::expected_tok_in_sil_instr,
-            "method, associated_type, associated_type_protocol, base_protocol"))
+                          diag::expected_tok_in_sil_instr,
+                          "method, associated_type, associated_type_protocol, "
+                          "base_protocol, conformance_requirement"))
         return true;
 
       if (EntryKeyword.str() == "base_protocol") {
@@ -4759,6 +4762,56 @@ bool Parser::parseSILWitnessTable() {
         witnessEntries.push_back(SILWitnessTable::AssociatedTypeProtocolWitness{
           assoc, proto, ProtocolConformanceRef(conformance)
         });
+        continue;
+      }
+      if (EntryKeyword.str() == "conformance_requirement") {
+        if (parseToken(tok::l_paren, diag::expected_sil_witness_lparen))
+          return true;
+        // FIXME: This doesn't actually correctly parse what is printed,
+        // e.g. τ_0_0.Type can't resolve the generic type param type.
+        ParserResult<TypeRepr> TyInProtocolR = parseType();
+        if (TyInProtocolR.isNull())
+          return true;
+        TypeLoc TyInProtocol = TyInProtocolR.get();
+        if (swift::performTypeLocChecking(Context, TyInProtocol,
+                                          /*isSILMode=*/false,
+                                          /*isSILType=*/false, witnessEnv, &SF))
+
+          // FIXME: this error message is wrong.
+          if (parseToken(tok::equal, diag::expected_sil_witness_lparen))
+            return true;
+
+        ParserResult<TypeRepr> TyInConformanceR = parseType();
+        if (TyInConformanceR.isNull())
+          return true;
+        TypeLoc TyInConformance = TyInConformanceR.get();
+        if (swift::performTypeLocChecking(Context, TyInConformance,
+                                          /*isSILMode=*/false,
+                                          /*isSILType=*/false, witnessEnv, &SF))
+          return true;
+        if (parseToken(tok::colon, diag::expected_sil_witness_colon))
+          return true;
+        ProtocolDecl *proto = parseProtocolDecl(*this, WitnessState);
+        if (!proto)
+          return true;
+        if (parseToken(tok::r_paren, diag::expected_sil_witness_rparen) ||
+            parseToken(tok::colon, diag::expected_sil_witness_colon))
+          return true;
+
+        ProtocolConformanceRef conformance(proto);
+        if (Tok.getText() != "dependent") {
+          auto concrete = WitnessState.parseProtocolConformance();
+          if (!concrete) // Ignore this witness entry for now.
+            continue;
+          conformance = ProtocolConformanceRef(concrete);
+        } else {
+          consumeToken();
+        }
+
+        witnessEntries.push_back(SILWitnessTable::ConformanceRequirementWitness{
+            TyInProtocol.getType()->getCanonicalType(),
+            TyInConformance.getType()->getCanonicalType(), proto,
+            ProtocolConformanceRef(conformance)});
         continue;
       }
 
