@@ -682,12 +682,22 @@ namespace {
   class WitnessTableLayout : public SILWitnessVisitor<WitnessTableLayout> {
     unsigned NumWitnesses = 0;
     SmallVector<WitnessTableEntry, 16> Entries;
+    SmallVector<WitnessTableConformanceEntry, 4> Conformances;
 
     WitnessIndex getNextIndex() {
       return WitnessIndex(NumWitnesses++, /*isPrefix=*/false);
     }
 
   public:
+    void build(ProtocolDecl *protocol) {
+      if (!Lowering::TypeConverter::protocolRequiresWitnessTable(protocol))
+        return;
+
+      visitProtocolDecl(protocol);
+
+      addConformances(protocol);
+    }
+
     /// The next witness is an out-of-line base protocol.
     void addOutOfLineBaseProtocol(ProtocolDecl *baseProto) {
       Entries.push_back(
@@ -715,6 +725,24 @@ namespace {
 
     unsigned getNumWitnesses() const { return NumWitnesses; }
     ArrayRef<WitnessTableEntry> getEntries() const { return Entries; }
+    ArrayRef<WitnessTableConformanceEntry> getConformances() const {
+      return Conformances;
+    }
+
+  private:
+    void addConformances(ProtocolDecl *protocol) {
+      auto sig = protocol->getRequirementSignature();
+      for (auto req : sig->getRequirements()) {
+        if (req.getKind() != RequirementKind::Conformance)
+          continue;
+
+        auto conformingType = req.getFirstType()->getCanonicalType();
+        auto protocol = req.getSecondType()->castTo<ProtocolType>()->getDecl();
+        if (Lowering::TypeConverter::protocolRequiresWitnessTable(protocol))
+          Conformances.push_back(WitnessTableConformanceEntry(
+              getNextIndex(), conformingType, protocol));
+      }
+    }
   };
 
   /// A path through a protocol hierarchy.
@@ -1276,12 +1304,43 @@ public:
         bindArchetypeAccessPaths(IGF, generics, getInContext);
       }
     }
+
+    void addConformanceRequirements() {
+      auto *proto = Conformance.getProtocol();
+
+      auto sig = proto->getRequirementSignature()->getCanonicalSignature();
+
+      for (auto req : sig->getRequirements()) {
+        if (req.getKind() != RequirementKind::Conformance)
+          continue;
+        // This needs to happen before we grab the next SILEntry, because it
+        // could be empty, if the last protocol in the requirement signature
+        // doesn't need a witness table.
+        auto reqProtocol =
+            req.getSecondType()->castTo<ProtocolType>()->getDecl();
+        if (!Lowering::TypeConverter::protocolRequiresWitnessTable(reqProtocol))
+          continue;
+
+        auto &entry = SILEntries.front();
+        assert(entry.getKind() == SILWitnessTable::ConformanceRequirement);
+        auto &confReq = entry.getConformanceRequirementWitness();
+        (void)confReq;
+        // FIXME
+        llvm::Constant *wtableAccessFunction =
+            llvm::ConstantPointerNull::get(IGM.FunctionPtrTy);
+        Table.push_back(wtableAccessFunction);
+
+        SILEntries = SILEntries.slice(1);
+      }
+    }
   };
 } // end anonymous namespace
 
 /// Build the witness table.
 void WitnessTableBuilder::build() {
   visitProtocolDecl(Conformance.getProtocol());
+
+  addConformanceRequirements();
 
   // Go through and convert all the entries to i8*.
   // TODO: the IR would be more legible if we made a struct instead.
@@ -1679,12 +1738,11 @@ const ProtocolInfo &TypeConverter::getProtocolInfo(ProtocolDecl *protocol) {
 
   // If not, lay out the protocol's witness table, if it needs one.
   WitnessTableLayout layout;
-  if (Lowering::TypeConverter::protocolRequiresWitnessTable(protocol))
-    layout.visitProtocolDecl(protocol);
+  layout.build(protocol);
 
   // Create a ProtocolInfo object from the layout.
-  ProtocolInfo *info = ProtocolInfo::create(layout.getNumWitnesses(),
-                                            layout.getEntries());
+  ProtocolInfo *info = ProtocolInfo::create(
+      layout.getNumWitnesses(), layout.getEntries(), layout.getConformances());
   info->NextConverted = FirstProtocol;
   FirstProtocol = info;
 
@@ -1696,11 +1754,14 @@ const ProtocolInfo &TypeConverter::getProtocolInfo(ProtocolDecl *protocol) {
 }
 
 /// Allocate a new ProtocolInfo.
-ProtocolInfo *ProtocolInfo::create(unsigned numWitnesses,
-                                   ArrayRef<WitnessTableEntry> table) {
-  size_t bufferSize = totalSizeToAlloc<WitnessTableEntry>(table.size());
+ProtocolInfo *
+ProtocolInfo::create(unsigned numWitnesses, ArrayRef<WitnessTableEntry> table,
+                     ArrayRef<WitnessTableConformanceEntry> conformances) {
+  size_t bufferSize =
+      totalSizeToAlloc<WitnessTableEntry, WitnessTableConformanceEntry>(
+          table.size(), conformances.size());
   void *buffer = ::operator new(bufferSize);
-  return new(buffer) ProtocolInfo(numWitnesses, table);
+  return new (buffer) ProtocolInfo(numWitnesses, table, conformances);
 }
 
 ProtocolInfo::~ProtocolInfo() {

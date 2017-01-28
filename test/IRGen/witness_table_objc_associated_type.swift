@@ -19,7 +19,7 @@ struct SB: B {
   typealias AA = SA
   func foo() {}
 }
-// CHECK-LABEL: @_T034witness_table_objc_associated_type2SBVAA1BAAWP = hidden constant [3 x i8*] [
+// CHECK-LABEL: @_T034witness_table_objc_associated_type2SBVAA1BAAWP = hidden constant [4 x i8*] [
 // CHECK:         i8* bitcast (%swift.type* ()* @_T034witness_table_objc_associated_type2SAVMa to i8*)
 // CHECK:         i8* bitcast (i8** ()* @_T034witness_table_objc_associated_type2SAVAA1AAAWa to i8*)
 // CHECK:         i8* bitcast {{.*}} @_T034witness_table_objc_associated_type2SBVAA1BAaaDP3fooyyFTW

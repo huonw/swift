@@ -141,9 +141,27 @@ public:
   }
 };
 
+class WitnessTableConformanceEntry {
+  WitnessIndex Index;
+  CanType ConformingType;
+  ProtocolDecl *Protocol;
+
+public:
+  WitnessTableConformanceEntry(WitnessIndex index, CanType conformingType,
+                               ProtocolDecl *protocol)
+      : Index(index), ConformingType(conformingType), Protocol(protocol) {}
+
+  WitnessIndex getIndex() const { return Index; }
+
+  CanType getConformingType() const { return ConformingType; }
+
+  ProtocolDecl *getProtocol() const { return Protocol; }
+};
+
 /// An abstract description of a protocol.
-class ProtocolInfo final :
-    private llvm::TrailingObjects<ProtocolInfo, WitnessTableEntry> {
+class ProtocolInfo final
+    : private llvm::TrailingObjects<ProtocolInfo, WitnessTableEntry,
+                                    WitnessTableConformanceEntry> {
   friend TrailingObjects;
 
   /// A singly-linked-list of all the protocols that have been laid out.
@@ -156,19 +174,31 @@ class ProtocolInfo final :
   /// The number of table entries in this protocol layout.
   unsigned NumTableEntries;
 
+  /// The number of conformances in this protocol.
+  unsigned NumConformanceEntries;
+
   /// A table of all the conformances we've needed so far for this
   /// protocol.  We expect this to be quite small for most protocols.
   mutable llvm::SmallDenseMap<const ProtocolConformance*, ConformanceInfo*, 2>
     Conformances;
 
-  ProtocolInfo(unsigned numWitnesses, ArrayRef<WitnessTableEntry> table)
-    : NumWitnesses(numWitnesses), NumTableEntries(table.size()) {
+  ProtocolInfo(unsigned numWitnesses, ArrayRef<WitnessTableEntry> table,
+               ArrayRef<WitnessTableConformanceEntry> conformances)
+      : NumWitnesses(numWitnesses), NumTableEntries(table.size()),
+        NumConformanceEntries(conformances.size()) {
     std::uninitialized_copy(table.begin(), table.end(),
                             getTrailingObjects<WitnessTableEntry>());
+    std::uninitialized_copy(conformances.begin(), conformances.end(),
+                            getTrailingObjects<WitnessTableConformanceEntry>());
   }
 
-  static ProtocolInfo *create(unsigned numWitnesses,
-                              ArrayRef<WitnessTableEntry> table);
+  static ProtocolInfo *
+  create(unsigned numWitnesses, ArrayRef<WitnessTableEntry> table,
+         ArrayRef<WitnessTableConformanceEntry> conformances);
+
+  size_t numTrailingObjects(OverloadToken<WitnessTableEntry>) const {
+    return NumTableEntries;
+  }
 
 public:
   const ConformanceInfo &getConformance(IRGenModule &IGM,
@@ -183,6 +213,10 @@ public:
 
   ArrayRef<WitnessTableEntry> getWitnessEntries() const {
     return {getTrailingObjects<WitnessTableEntry>(), NumTableEntries};
+  }
+  ArrayRef<WitnessTableConformanceEntry> getConformanceEntries() const {
+    return {getTrailingObjects<WitnessTableConformanceEntry>(),
+            NumConformanceEntries};
   }
 
   const WitnessTableEntry &getWitnessEntry(Decl *member) const {

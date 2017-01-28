@@ -19,7 +19,7 @@ struct Universal : P, Q {}
 // CHECK:         ret i8** getelementptr inbounds ([0 x i8*], [0 x i8*]* @_T023associated_type_witness9UniversalVAA1QAAWP, i32 0, i32 0)
 
 //   Witness table for WithUniversal : Assocked.
-// GLOBAL-LABEL: @_T023associated_type_witness13WithUniversalVAA8AssockedAAWP = hidden constant [3 x i8*] [
+// GLOBAL-LABEL: @_T023associated_type_witness13WithUniversalVAA8AssockedAAWP = hidden constant [5 x i8*] [
 // GLOBAL-SAME:    i8* bitcast (%swift.type* ()* @_T023associated_type_witness9UniversalVMa to i8*)
 // GLOBAL-SAME:    i8* bitcast (i8** ()* @_T023associated_type_witness9UniversalVAA1PAAWa to i8*)
 // GLOBAL-SAME:    i8* bitcast (i8** ()* @_T023associated_type_witness9UniversalVAA1QAAWa to i8*)  
@@ -29,7 +29,7 @@ struct WithUniversal : Assocked {
 }
 
 //   Witness table for GenericWithUniversal : Assocked.
-// GLOBAL-LABEL: @_T023associated_type_witness20GenericWithUniversalVyxGAA8AssockedAAlWP = hidden constant [3 x i8*] [
+// GLOBAL-LABEL: @_T023associated_type_witness20GenericWithUniversalVyxGAA8AssockedAAlWP = hidden constant [5 x i8*] [
 // GLOBAL-SAME:    i8* bitcast (%swift.type* ()* @_T023associated_type_witness9UniversalVMa to i8*)
 // GLOBAL-SAME:    i8* bitcast (i8** ()* @_T023associated_type_witness9UniversalVAA1PAAWa to i8*)
 // GLOBAL-SAME:    i8* bitcast (i8** ()* @_T023associated_type_witness9UniversalVAA1QAAWa to i8*)  
@@ -39,7 +39,7 @@ struct GenericWithUniversal<T> : Assocked {
 }
 
 //   Witness table for Fulfilled : Assocked.
-// GLOBAL-LABEL: @_T023associated_type_witness9FulfilledVyxGAA8AssockedAaA1PRzAA1QRzlWP = hidden constant [3 x i8*] [
+// GLOBAL-LABEL: @_T023associated_type_witness9FulfilledVyxGAA8AssockedAaA1PRzAA1QRzlWP = hidden constant [5 x i8*] [
 // GLOBAL-SAME:    i8* bitcast (%swift.type* (%swift.type*, i8**)* @_T023associated_type_witness9FulfilledVyxGAA8AssockedAaA1PRzAA1QRzl5AssocWt to i8*)
 // GLOBAL-SAME:    i8* bitcast (i8** (%swift.type*, %swift.type*, i8**)* @_T023associated_type_witness9FulfilledVyxGAA8AssockedAaA1PRzAA1QRzl5AssocAaEPWT to i8*)
 // GLOBAL-SAME:    i8* bitcast (i8** (%swift.type*, %swift.type*, i8**)* @_T023associated_type_witness9FulfilledVyxGAA8AssockedAaA1PRzAA1QRzl5AssocAaFPWT to i8*)
@@ -72,7 +72,7 @@ struct Fulfilled<T : P & Q> : Assocked {
 struct Pair<T, U> : P, Q {}
 
 //   Generic witness table pattern for Computed : Assocked.
-// GLOBAL-LABEL: @_T023associated_type_witness8ComputedVyxq_GAA8AssockedAAr0_lWP = hidden constant [3 x i8*] [
+// GLOBAL-LABEL: @_T023associated_type_witness8ComputedVyxq_GAA8AssockedAAr0_lWP = hidden constant [5 x i8*] [
 // GLOBAL-SAME:    i8* bitcast (%swift.type* (%swift.type*, i8**)* @_T023associated_type_witness8ComputedVyxq_GAA8AssockedAAr0_l5AssocWt to i8*)
 // GLOBAL-SAME:    i8* bitcast (i8** (%swift.type*, %swift.type*, i8**)* @_T023associated_type_witness8ComputedVyxq_GAA8AssockedAAr0_l5AssocAA1PPWT to i8*)
 // GLOBAL-SAME:    i8* bitcast (i8** (%swift.type*, %swift.type*, i8**)* @_T023associated_type_witness8ComputedVyxq_GAA8AssockedAAr0_l5AssocAA1QPWT to i8*)
