@@ -1324,10 +1324,53 @@ public:
         auto &entry = SILEntries.front();
         assert(entry.getKind() == SILWitnessTable::ConformanceRequirement);
         auto &confReq = entry.getConformanceRequirementWitness();
-        (void)confReq;
-        // FIXME
-        llvm::Constant *wtableAccessFunction =
-            llvm::ConstantPointerNull::get(IGM.FunctionPtrTy);
+        auto subconformance = confReq.Witness;
+        auto conformingType = confReq.TypeInProtocol;
+        auto conformsToProtocol = confReq.Protocol;
+
+        auto concreteConformingType = confReq.TypeInConformance;
+
+        llvm::Constant *wtableAccessFunction;
+
+        // FIXME: this special-cases the two things that may occur at the
+        // moment: a conformance requirement on an associated type of the
+        // current protocol, and a super-protocol conformance. This will need to
+        // be generalised for where clauses on associated types.
+        if (auto DMT = conformingType->getAs<DependentMemberType>()) {
+          auto assocType = DMT->getAssocType();
+          assert(assocType->getProtocol() == proto);
+          if (Lowering::TypeConverter::protocolRequiresWitnessTable(confReq.Protocol)) {
+            wtableAccessFunction =
+              getAssociatedTypeWitnessTableAccessFunction(assocType,
+                                                          concreteConformingType->getCanonicalType(),
+                                                          confReq.Protocol,
+                                                          subconformance);
+          } else {
+            wtableAccessFunction = llvm::ConstantPointerNull::get(IGM.WitnessTablePtrTy);
+          }
+        } else {
+          auto param = conformingType->castTo<GenericTypeParamType>();
+          (void)param;
+          assert(param->getDepth() == 0 && param->getIndex() == 0 &&
+                 "only Self is currently supported");
+          assert(subconformance.isConcrete() &&
+                 "an abstract super-protocol conformance makes no sense");
+          const ProtocolInfo &basePI = IGM.getProtocolInfo(conformsToProtocol);
+          const ConformanceInfo &conf =
+            basePI.getConformance(IGM, conformsToProtocol, subconformance.getConcrete());
+
+          // If we can emit the base witness table as a constant, do so.
+          llvm::Constant *baseWitness = conf.tryGetConstantTable(IGM, ConcreteType);
+          if (baseWitness) {
+            wtableAccessFunction = baseWitness;
+          } else {
+            // Otherwise, we'll need to derive it at instantiation time.
+            RequiresSpecialization = true;
+            SpecializedBaseConformances.push_back({Table.size(), &conf});
+            wtableAccessFunction = llvm::ConstantPointerNull::get(IGM.WitnessTablePtrTy);
+          }
+        }
+
         Table.push_back(wtableAccessFunction);
 
         SILEntries = SILEntries.slice(1);
@@ -1364,6 +1407,10 @@ getAssociatedTypeMetadataAccessFunction(AssociatedTypeDecl *requirement,
   llvm::Function *accessor =
     IGM.getAddrOfAssociatedTypeMetadataAccessFunction(&Conformance,
                                                       requirement);
+
+  // FIXME: temporary work around for calling this function twice.
+  if (!accessor->getBasicBlockList().empty())
+    return accessor;
 
   IRGenFunction IGF(IGM, accessor);
   if (IGM.DebugInfo)
@@ -1461,6 +1508,9 @@ getAssociatedTypeWitnessTableAccessFunction(AssociatedTypeDecl *requirement,
     IGM.getAddrOfAssociatedTypeWitnessTableAccessFunction(&Conformance,
                                                           requirement,
                                                           associatedProtocol);
+  // FIXME: temporary work around for calling this function twice.
+  if (!accessor->getBasicBlockList().empty())
+    return accessor;
 
   IRGenFunction IGF(IGM, accessor);
   if (IGM.DebugInfo)
@@ -2938,9 +2988,24 @@ irgen::emitAssociatedTypeWitnessTableRef(IRGenFunction &IGF,
                                          llvm::Value *associatedTypeMetadata,
                                          ProtocolDecl *associatedProtocol) {
   auto &pi = IGF.IGM.getProtocolInfo(associatedType->getProtocol());
-  auto index = pi.getWitnessEntry(associatedType)
-                 .getAssociatedTypeWitnessTableIndex(associatedProtocol);
-  llvm::Value *witness = emitInvariantLoadOfOpaqueWitness(IGF, wtable, index);
+  auto type = associatedType->getDeclaredInterfaceType()->getCanonicalType();
+  llvm::Value *witness = nullptr;
+
+  for (const auto& conformance : pi.getConformanceEntries()) {
+    if (conformance.getConformingType() == type && associatedProtocol == conformance.getProtocol()) {
+      witness = emitInvariantLoadOfOpaqueWitness(IGF, wtable, conformance.getIndex());
+    }
+  }
+  if (!witness) {
+    // FIXME: we currently look up constraints in witness tables from which they
+    // have been eliminated as redundant (e.g. protocol P { at X: Y } protocol
+    // Q: P { at X: Y } will still look up X: Y in Q's witness table).
+    auto index = pi.getWitnessEntry(associatedType)
+      .getAssociatedTypeWitnessTableIndex(associatedProtocol);
+
+    witness = emitInvariantLoadOfOpaqueWitness(IGF, wtable, index);
+  }
+  assert(witness && "failed to find conformance");
 
   // Cast the witness to the appropriate function type.
   auto witnessTy = IGF.IGM.getAssociatedTypeWitnessTableAccessFunctionTy();
