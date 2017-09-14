@@ -5770,6 +5770,9 @@ bool TypeChecker::useObjectiveCBridgeableConformances(DeclContext *dc,
         WasUnsatisfied |= result.hasUnsatisfiedDependency();
         if (WasUnsatisfied)
           return Action::Stop;
+        if (result.getStatus() == RequirementCheckResult::Success)
+          assert(result.getConformance().getConditionalRequirements().empty() &&
+                 "cannot conform conditionally to _ObjectiveCBridgeable");
 
         // Set and Dictionary bridging also requires the conformance
         // of the key type to Hashable.
@@ -5864,6 +5867,9 @@ void TypeChecker::useBridgedNSErrorConformances(DeclContext *dc, Type type) {
   auto conformance = conformsToProtocol(type, bridgedStoredNSError, dc,
                                         ConformanceCheckFlags::Used);
   if (conformance && conformance->isConcrete()) {
+    assert(conformance->getConditionalRequirements().empty() &&
+           "cannot conform condtionally to _BridgedStoredNSError");
+
     // Hack: If we've used a conformance to the _BridgedStoredNSError
     // protocol, also use the RawRepresentable and _ErrorCodeProtocol
     // conformances on the Code associated type witness.
@@ -5882,6 +5888,9 @@ void TypeChecker::useBridgedNSErrorConformances(DeclContext *dc, Type type) {
                      (ConformanceCheckFlags::SuppressDependencyTracking|
                       ConformanceCheckFlags::Used));
   if (conformance && conformance->isConcrete()) {
+    assert(conformance->getConditionalRequirements().empty() &&
+           "cannot conform condtionally to _ErrorCodeProtocol");
+
     if (Type errorType = ProtocolConformanceRef::getTypeWitnessByName(
           type, *conformance, Context.Id_ErrorType, this)) {
       (void)conformsToProtocol(errorType, bridgedStoredNSError, dc,
