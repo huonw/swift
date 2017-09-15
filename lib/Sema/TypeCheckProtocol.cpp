@@ -6374,6 +6374,12 @@ void TypeChecker::checkConformancesInContext(DeclContext *dc,
         inferStaticInitializeObjCMetadata(classDecl);
       }
     }
+
+    // When requested, print out information about this conformance.
+    if (Context.LangOpts.DebugGenericSignatures) {
+      dc->dumpContext();
+      conformance->dump();
+    }
   }
 
   // Check all conformances.

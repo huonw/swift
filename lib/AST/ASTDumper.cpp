@@ -2777,6 +2777,11 @@ void ProtocolConformance::dump(llvm::raw_ostream &out, unsigned indent) const {
       out << '\n';
       conformance.dump(out, indent + 2);
     }
+    for (auto requirement : normal->getConditionalRequirements()) {
+      out << '\n';
+      out.indent(indent + 2);
+      requirement.dump(out);
+    }
     break;
   }
 
@@ -2794,6 +2799,11 @@ void ProtocolConformance::dump(llvm::raw_ostream &out, unsigned indent) const {
     out << '\n';
     for (auto sub : conf->getGenericSubstitutions()) {
       sub.dump(out, indent + 2);
+      out << '\n';
+    }
+    for (auto subReq : conf->getConditionalRequirements()) {
+      out.indent(indent + 2);
+      subReq.dump(out);
       out << '\n';
     }
     conf->getGenericConformance()->dump(out, indent + 2);
