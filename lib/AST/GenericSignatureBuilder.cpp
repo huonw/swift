@@ -97,6 +97,8 @@ STATISTIC(NumDelayedRequirementResolved,
           "Delayed requirements resolved");
 STATISTIC(NumDelayedRequirementUnresolved,
           "Delayed requirements left unresolved");
+STATISTIC(NumConditionalRequirementsAdded,
+          "# of conditional requirements added");
 
 struct GenericSignatureBuilder::Implementation {
   /// Allocator.
@@ -1898,6 +1900,18 @@ ConstraintResult GenericSignatureBuilder::handleUnresolvedRequirement(
   }
 }
 
+// Function for feeding through any other requirements that the conformance
+// requires to be satisfied. These are things we're inferring.
+static void addConditionalRequirements(GenericSignatureBuilder &builder,
+                                       ProtocolConformanceRef conformance) {
+  auto source = FloatingRequirementSource::forInferred(nullptr);
+  for (auto requirement : conformance.getConditionalRequirements()) {
+    builder.addRequirement(requirement, source,
+                           /*FIXME:inferForModule=*/nullptr);
+    ++NumConditionalRequirementsAdded;
+  }
+}
+
 const RequirementSource *
 GenericSignatureBuilder::resolveConcreteConformance(PotentialArchetype *pa,
                                                     ProtocolDecl *proto) {
@@ -1934,6 +1948,9 @@ GenericSignatureBuilder::resolveConcreteConformance(PotentialArchetype *pa,
   concreteSource = concreteSource->viaConcrete(*this, *conformance);
   paEquivClass->conformsTo[proto].push_back({pa, proto, concreteSource});
   ++NumConformanceConstraints;
+
+  addConditionalRequirements(*this, *conformance);
+
   return concreteSource;
 }
 
@@ -1966,6 +1983,9 @@ const RequirementSource *GenericSignatureBuilder::resolveSuperConformance(
     superclassSource->viaSuperclass(*this, *conformance);
   paEquivClass->conformsTo[proto].push_back({pa, proto, superclassSource});
   ++NumConformanceConstraints;
+
+  addConditionalRequirements(*this, *conformance);
+
   return superclassSource;
 }
 
