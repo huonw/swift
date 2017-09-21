@@ -40,7 +40,8 @@ static std::vector<StringRef> sortSymbols(llvm::StringSet<> &symbols) {
 
 bool swift::writeTBD(ModuleDecl *M, bool hasMultipleIRGenThreads,
                      bool silSerializeWitnessTables, StringRef OutputFilename,
-                     StringRef installName) {
+                     StringRef installName, StringRef currentVersion,
+                     StringRef compatibilityVersion) {
   std::error_code EC;
   llvm::raw_fd_ostream OS(OutputFilename, EC, llvm::sys::fs::F_None);
   if (EC) {
@@ -50,7 +51,7 @@ bool swift::writeTBD(ModuleDecl *M, bool hasMultipleIRGenThreads,
   }
 
   writeTBDFile(M, OS, hasMultipleIRGenThreads, silSerializeWitnessTables,
-               installName);
+               installName, currentVersion, compatibilityVersion);
 
   return false;
 }

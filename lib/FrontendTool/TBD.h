@@ -26,7 +26,8 @@ class FrontendOptions;
 
 bool writeTBD(ModuleDecl *M, bool hasMultipleIRGenThreads,
               bool silSerializeWitnessTables, llvm::StringRef OutputFilename,
-              llvm::StringRef installName);
+              llvm::StringRef installName, llvm::StringRef currentVersion,
+              llvm::StringRef compatibilityVersion);
 bool inputFileKindCanHaveTBDValidated(InputFileKind kind);
 bool validateTBD(ModuleDecl *M, llvm::Module &IRModule,
                  bool hasMultipleIRGenThreads, bool silSerializeWitnessTables,

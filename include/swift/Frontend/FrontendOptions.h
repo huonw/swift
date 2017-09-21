@@ -299,6 +299,10 @@ public:
 
   /// The install_name to use in the TBD file.
   std::string TBDInstallName;
+  /// The current_version to use in the TBD file.
+  std::string TBDCurrentVersion;
+  /// The compatibility_version to use in the TBD file.
+  std::string TBDCompatibilityVersion;
 
   /// An enum with different modes for automatically crashing at defined times.
   enum class DebugCrashMode {

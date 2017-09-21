@@ -326,18 +326,17 @@ void TBDGenVisitor::visitProtocolDecl(ProtocolDecl *PD) {
 #endif
 }
 
-static void enumeratePublicSymbolsAndWrite(ModuleDecl *M, FileUnit *singleFile,
-                                           StringSet &symbols,
-                                           bool hasMultipleIRGenThreads,
-                                           bool silSerializeWitnessTables,
-                                           llvm::raw_ostream *os,
-                                           StringRef installName) {
+static void enumeratePublicSymbolsAndWrite(
+    ModuleDecl *M, FileUnit *singleFile, StringSet &symbols,
+    bool hasMultipleIRGenThreads, bool silSerializeWitnessTables,
+    llvm::raw_ostream *os, StringRef installName, StringRef currentVersion,
+    StringRef compatibilityVersion) {
   auto isWholeModule = singleFile == nullptr;
   const auto &target = M->getASTContext().LangOpts.Target;
   UniversalLinkageInfo linkInfo(target, hasMultipleIRGenThreads, isWholeModule);
 
   TBDGenVisitor visitor(symbols, target, linkInfo, M, silSerializeWitnessTables,
-                        installName);
+                        installName, currentVersion, compatibilityVersion);
 
   auto visitFile = [&](FileUnit *file) {
     SmallVector<Decl *, 16> decls;
@@ -387,9 +386,11 @@ void swift::enumeratePublicSymbols(ModuleDecl *M, StringSet &symbols,
 }
 void swift::writeTBDFile(ModuleDecl *M, llvm::raw_ostream &os,
                          bool hasMultipleIRGenThreads,
-                         bool silSerializeWitnessTables,
-                         StringRef installName) {
+                         bool silSerializeWitnessTables, StringRef installName,
+                         StringRef currentVersion,
+                         StringRef compatibilityVersion) {
   StringSet symbols;
   enumeratePublicSymbolsAndWrite(M, nullptr, symbols, hasMultipleIRGenThreads,
-                                 silSerializeWitnessTables, &os, installName);
+                                 silSerializeWitnessTables, &os, installName,
+                                 currentVersion, compatibilityVersion);
 }

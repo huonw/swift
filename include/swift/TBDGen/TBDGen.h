@@ -32,7 +32,8 @@ void enumeratePublicSymbols(ModuleDecl *module, llvm::StringSet<> &symbols,
 
 void writeTBDFile(ModuleDecl *M, llvm::raw_ostream &os,
                   bool hasMultipleIRGenThreads, bool silSerializeWitnessTables,
-                  llvm::StringRef installName);
+                  llvm::StringRef installName, llvm::StringRef currentVersion,
+                  llvm::StringRef compatibilityVersion);
 
 } // end namespace swift
 

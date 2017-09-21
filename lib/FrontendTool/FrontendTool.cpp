@@ -752,8 +752,15 @@ static bool performCompile(CompilerInstance &Instance,
                            ? "lib" + Invocation.getModuleName().str() + ".dylib"
                            : opts.TBDInstallName;
 
+    auto currentVersion =
+        opts.TBDCurrentVersion.empty() ? "0" : opts.TBDCurrentVersion;
+    auto compatibilityVersion = opts.TBDCompatibilityVersion.empty()
+                                    ? "0"
+                                    : opts.TBDCompatibilityVersion;
+
     if (writeTBD(Instance.getMainModule(), hasMultipleIRGenThreads,
-                 silOpts.SILSerializeWitnessTables, opts.TBDPath, installName))
+                 silOpts.SILSerializeWitnessTables, opts.TBDPath, installName,
+                 currentVersion, compatibilityVersion))
       return true;
   }
 
