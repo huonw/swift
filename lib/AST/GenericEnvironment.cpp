@@ -370,8 +370,12 @@ getSubstitutionMap(TypeSubstitutionFn subs,
         auto conformance = lookupConformance(canTy,
                                              currentReplacement,
                                              protoType);
-        if (conformance)
+        if (conformance) {
+          assert(conformance->getConditionalRequirements().empty() &&
+                 "unhandled conditional requirements");
+
           subMap.addConformance(canTy, *conformance);
+        }
       }
 
       return false;
