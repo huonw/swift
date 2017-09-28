@@ -669,6 +669,10 @@ SILGenModule::emitProtocolWitness(ProtocolConformance *conformance,
     reqtSubstTy = CanFunctionType::get(input, result, reqtOrigTy->getExtInfo());
   }
 
+  // FIXME: this needs to pull out the conformances/witness-tables for any
+  // conditional requirements from the witness table and pass them to the
+  // underlying function in the thunk.
+
   // Lower the witness thunk type with the requirement's abstraction level.
   auto witnessSILFnType =
     getNativeSILFunctionType(M, AbstractionPattern(reqtOrigTy),
