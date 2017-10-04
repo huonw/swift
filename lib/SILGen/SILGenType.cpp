@@ -399,6 +399,8 @@ public:
     auto *proto = Conformance->getProtocol();
     visitProtocolDecl(proto);
 
+    addConditionalRequirements();
+
     // Check if we already have a declaration or definition for this witness
     // table.
     if (auto *wt = SGM.M.lookUpWitnessTable(Conformance, false)) {
@@ -520,6 +522,24 @@ public:
     Entries.push_back(SILWitnessTable::AssociatedTypeProtocolWitness{
         req.getAssociation(), req.getAssociatedRequirement(),
         assocConformance});
+  }
+
+  void addConditionalRequirements() {
+    for (auto req : Conformance->getConditionalRequirements()) {
+      if (req.getKind() != RequirementKind::Conformance)
+        continue;
+
+      auto type = req.getFirstType()->getCanonicalType();
+      auto protocolType = req.getSecondType()->getAs<ProtocolType>();
+      auto protocol = protocolType->getDecl();
+
+      auto conformance =
+          Conformance->getGenericSignature()->lookupConformance(type, protocol);
+      assert(conformance && "unable to find conformance that should be known");
+
+      Entries.push_back(SILWitnessTable::ConditionalConformanceWitnessTable{
+          type, protocol, *conformance});
+    }
   }
 };
 

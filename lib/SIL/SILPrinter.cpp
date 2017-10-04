@@ -2679,6 +2679,22 @@ void SILWitnessTable::print(llvm::raw_ostream &OS, bool Verbose) const {
          << "': <<not present>>";
       break;
     }
+    case ConditionalConformance: {
+      // conditional_conformance_witness_table (TypeName: Protocol):
+      // <conformance>
+      auto &conditionalConformanceWitness =
+          witness.getConditionalConformanceWitness();
+      OS << "conditional_conformance_witness_table (";
+      (void)printAssociatedTypePath(OS,
+                                    conditionalConformanceWitness.Requirement);
+      OS << ": " << conditionalConformanceWitness.Protocol->getName() << "): ";
+      if (conditionalConformanceWitness.Conformance.isConcrete())
+        conditionalConformanceWitness.Conformance.getConcrete()->printName(
+            OS, Options);
+      else
+        OS << "dependent";
+      break;
+    }
     }
     OS << '\n';
   }

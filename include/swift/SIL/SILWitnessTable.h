@@ -89,7 +89,16 @@ public:
     /// The witness for the optional requirement that wasn't present.
     ValueDecl *Witness;
   };
-  
+
+  /// An entry for a conformance requirement that makes the requirement
+  /// conditional. These aren't public, but any witness thunks need to feed them
+  /// into the true witness functions.
+  struct ConditionalConformanceWitnessTable {
+    CanType Requirement;
+    ProtocolDecl *Protocol;
+    ProtocolConformanceRef Conformance;
+  };
+
   /// A witness table entry kind.
   enum WitnessKind {
     Invalid,
@@ -97,9 +106,10 @@ public:
     AssociatedType,
     AssociatedTypeProtocol,
     BaseProtocol,
-    MissingOptional
+    MissingOptional,
+    ConditionalConformance
   };
-  
+
   /// A witness table entry.
   class Entry {
     WitnessKind Kind;
@@ -109,6 +119,7 @@ public:
       AssociatedTypeProtocolWitness AssociatedTypeProtocol;
       BaseProtocolWitness BaseProtocol;
       MissingOptionalWitness MissingOptional;
+      ConditionalConformanceWitnessTable ConditionalConformance;
     };
     
   public:
@@ -135,7 +146,10 @@ public:
     Entry(const MissingOptionalWitness &MissingOptional)
       : Kind(WitnessKind::MissingOptional), MissingOptional(MissingOptional) {
     }
-    
+    Entry(const ConditionalConformanceWitnessTable &ConditionalConformance)
+        : Kind(WitnessKind::ConditionalConformance),
+          ConditionalConformance(ConditionalConformance) {}
+
     WitnessKind getKind() const { return Kind; }
     
     const MethodWitness &getMethodWitness() const {
@@ -159,6 +173,12 @@ public:
     const MissingOptionalWitness &getMissingOptionalWitness() const {
       assert(Kind == WitnessKind::MissingOptional);
       return MissingOptional;
+    }
+
+    const ConditionalConformanceWitnessTable &
+    getConditionalConformanceWitness() const {
+      assert(Kind == WitnessKind::ConditionalConformance);
+      return ConditionalConformance;
     }
 
     void removeWitnessMethod() {

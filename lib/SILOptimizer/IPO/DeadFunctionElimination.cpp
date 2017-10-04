@@ -179,6 +179,14 @@ protected:
             ensureAliveConformance(CRef.getConcrete());
           break;
         }
+        case SILWitnessTable::ConditionalConformance: {
+          ProtocolConformanceRef CRef =
+              entry.getConditionalConformanceWitness().Conformance;
+          if (CRef.isConcrete())
+            ensureAliveConformance(CRef.getConcrete());
+
+          break;
+        }
         case SILWitnessTable::BaseProtocol:
           ensureAliveConformance(entry.getBaseProtocolWitness().Witness);
           break;
