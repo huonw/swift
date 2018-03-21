@@ -1218,9 +1218,9 @@ static void configureImplicitSelf(TypeChecker &tc,
 
   // 'self' is 'let' for reference types (i.e., classes) or when 'self' is
   // neither inout.
-  auto specifier = selfParam.getParameterFlags().isInOut()
-                       ? VarDecl::Specifier::InOut
-                       : VarDecl::Specifier::Default;
+
+  VarDecl::Specifier specifier = VarDecl::specifierFromValueOwnership(
+      selfParam.getParameterFlags().getValueOwnership());
   selfDecl->setSpecifier(specifier);
 
   selfDecl->setInterfaceType(selfParam.getPlainType());
@@ -1233,10 +1233,10 @@ static void recordSelfContextType(AbstractFunctionDecl *func) {
   auto selfParam = computeSelfParam(func, /*isInitializingCtor*/true,
                                     /*wantDynamicSelf*/true);
 
+  VarDecl::Specifier specifier = VarDecl::specifierFromValueOwnership(
+      selfParam.getParameterFlags().getValueOwnership());
+  selfDecl->setSpecifier(specifier);
   auto selfTy = func->mapTypeIntoContext(selfParam.getType());
-  if (selfParam.getParameterFlags().isInOut()) {
-    selfDecl->setSpecifier(VarDecl::Specifier::InOut);
-  }
   selfDecl->setType(selfTy->getInOutObjectType());
 }
 

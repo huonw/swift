@@ -81,9 +81,9 @@ public:
   /// Note that this decl is created, but it is returned with an incorrect
   /// DeclContext that needs to be set correctly.  This is automatically handled
   /// when a function is created with this as part of its argument list.
-  static ParameterList *createSelf(SourceLoc loc, DeclContext *DC,
-                                   bool isStatic = false,
-                                   bool isInOut = false);
+  static ParameterList *
+  createSelf(SourceLoc loc, DeclContext *DC, bool isStatic = false,
+             ValueOwnership ownership = ValueOwnership::Default);
 
   SourceLoc getLParenLoc() const { return LParenLoc; }
   SourceLoc getRParenLoc() const { return RParenLoc; }

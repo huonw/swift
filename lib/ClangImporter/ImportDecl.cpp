@@ -430,9 +430,10 @@ makeEnumRawValueConstructor(ClangImporter::Implementation &Impl,
   auto rawTy = enumDecl->getRawType();
   auto enumTy = enumDecl->getDeclaredInterfaceType();
   auto metaTy = MetatypeType::get(enumTy);
-  
-  auto selfDecl = ParamDecl::createSelf(SourceLoc(), enumDecl,
-                                        /*static*/false, /*inout*/true);
+
+  auto selfDecl =
+      ParamDecl::createSelf(SourceLoc(), enumDecl,
+                            /*static*/ false, ValueOwnership::InOut);
 
   auto param = new (C) ParamDecl(VarDecl::Specifier::Default, SourceLoc(),
                                  SourceLoc(), C.Id_rawValue,
@@ -706,8 +707,9 @@ static AccessorDecl *makeFieldSetterDecl(ClangImporter::Implementation &Impl,
                                          VarDecl *importedFieldDecl,
                                          ClangNode clangNode = ClangNode()) {
   auto &C = Impl.SwiftContext;
-  auto selfDecl = ParamDecl::createSelf(SourceLoc(), importedDecl,
-                                        /*isStatic*/false, /*isInOut*/true);
+  auto selfDecl =
+      ParamDecl::createSelf(SourceLoc(), importedDecl,
+                            /*isStatic*/ false, ValueOwnership::InOut);
   auto newValueDecl = new (C) ParamDecl(VarDecl::Specifier::Default,
                                         SourceLoc(), SourceLoc(),
                                         Identifier(), SourceLoc(), C.Id_value,
@@ -1160,8 +1162,9 @@ createDefaultConstructor(ClangImporter::Implementation &Impl,
   auto &context = Impl.SwiftContext;
 
   // Create the 'self' declaration.
-  auto selfDecl = ParamDecl::createSelf(SourceLoc(), structDecl,
-                                        /*static*/ false, /*inout*/ true);
+  auto selfDecl =
+      ParamDecl::createSelf(SourceLoc(), structDecl,
+                            /*static*/ false, ValueOwnership::InOut);
 
   // self & param.
   auto emptyPL = ParameterList::createEmpty(context);
@@ -1246,8 +1249,9 @@ createValueConstructor(ClangImporter::Implementation &Impl,
   auto &context = Impl.SwiftContext;
 
   // Create the 'self' declaration.
-  auto selfDecl = ParamDecl::createSelf(SourceLoc(), structDecl,
-                                        /*static*/ false, /*inout*/ true);
+  auto selfDecl =
+      ParamDecl::createSelf(SourceLoc(), structDecl,
+                            /*static*/ false, ValueOwnership::InOut);
 
   // Construct the set of parameters from the list of members.
   SmallVector<ParamDecl *, 8> valueParameters;
@@ -5620,7 +5624,7 @@ Decl *SwiftDeclConverter::importGlobalAsInitializer(
 
   bool selfIsInOut = !dc->getDeclaredInterfaceType()->hasReferenceSemantics();
   auto selfParam = ParamDecl::createSelf(SourceLoc(), dc, /*isStatic=*/false,
-                                         /*isInOut=*/selfIsInOut);
+                                         valueOwnershipFromBits(selfIsInOut));
 
   auto importedType =
       Impl.importFunctionReturnType(dc, decl, allowNSUIntegerAsInt);
@@ -5717,7 +5721,8 @@ Decl *SwiftDeclConverter::importGlobalAsMethod(
   }
 
   bodyParams.push_back(ParameterList::createWithoutLoc(ParamDecl::createSelf(
-      SourceLoc(), dc, !selfIdx.hasValue(), selfIsInOut)));
+      SourceLoc(), dc, !selfIdx.hasValue(),
+        valueOwnershipFromBits(selfIsInOut))));
   bodyParams.push_back(getNonSelfParamList(
       dc, decl, selfIdx, name.getArgumentNames(), allowNSUIntegerAsInt, !name));
 

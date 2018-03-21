@@ -1062,9 +1062,9 @@ static ValueDecl *deriveDecodable_init(TypeChecker &tc, Decl *parentDecl,
   // Params: (self [implicit], Decoder)
   // self should be inout if the type is a value type; not inout otherwise.
   auto inOut = !isa<ClassDecl>(target);
-  auto *selfDecl = ParamDecl::createSelf(SourceLoc(), target,
-                                         /*isStatic=*/false,
-                                         /*isInOut=*/inOut);
+  auto *selfDecl =
+      ParamDecl::createSelf(SourceLoc(), target,
+                            /*isStatic=*/false, valueOwnershipFromBits(inOut));
   auto *decoderParamDecl = new (C)
       ParamDecl(VarDecl::Specifier::Default, SourceLoc(), SourceLoc(),
                 C.Id_from, SourceLoc(), C.Id_decoder, decoderType, target);

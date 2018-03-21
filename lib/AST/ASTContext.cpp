@@ -3076,11 +3076,13 @@ AnyFunctionType::Param swift::computeSelfParam(AbstractFunctionDecl *AFD,
 
   bool isStatic = false;
   bool isMutating = false;
+  bool isConsuming = false;
   bool isDynamicSelf = false;
 
   if (auto *FD = dyn_cast<FuncDecl>(AFD)) {
     isStatic = FD->isStatic();
     isMutating = FD->isMutating();
+    isConsuming = FD->isConsuming();
 
     // Methods returning 'Self' have a dynamic 'self'.
     //
@@ -3117,13 +3119,13 @@ AnyFunctionType::Param swift::computeSelfParam(AbstractFunctionDecl *AFD,
     return AnyFunctionType::Param(MetatypeType::get(selfTy, Ctx), Identifier(),
                                   ParameterTypeFlags());
 
+  auto flags = ParameterTypeFlags().withOwned(isConsuming);
   // Reference types have 'self' of type T.
   if (containerTy->hasReferenceSemantics())
-    return AnyFunctionType::Param(selfTy, Identifier(),
-                                  ParameterTypeFlags());
+    return AnyFunctionType::Param(selfTy, Identifier(), flags);
 
   return AnyFunctionType::Param(selfTy, Identifier(),
-                                ParameterTypeFlags().withInOut(isMutating));
+                                flags.withInOut(isMutating));
 }
 
 void UnboundGenericType::Profile(llvm::FoldingSetNodeID &ID,

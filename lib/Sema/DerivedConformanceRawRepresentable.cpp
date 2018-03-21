@@ -289,8 +289,9 @@ static ConstructorDecl *deriveRawRepresentable_init(TypeChecker &tc,
   assert(tc.conformsToProtocol(rawType, equatableProto, enumDecl, None));
   (void)equatableProto;
 
-  auto *selfDecl = ParamDecl::createSelf(SourceLoc(), parentDC,
-                                         /*static*/false, /*inout*/true);
+  auto *selfDecl =
+      ParamDecl::createSelf(SourceLoc(), parentDC,
+                            /*static*/ false, ValueOwnership::InOut);
 
   auto *rawDecl = new (C)
       ParamDecl(VarDecl::Specifier::Default, SourceLoc(), SourceLoc(),

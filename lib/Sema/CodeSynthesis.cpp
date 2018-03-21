@@ -194,10 +194,9 @@ static AccessorDecl *createSetterPrototype(AbstractStorageDecl *storage,
 
   // The implicit 'self' argument if in a type context.
   if (storage->getDeclContext()->isTypeContext()) {
-    params.push_back(ParameterList::createSelf(loc,
-                                               storage->getDeclContext(),
-                                               /*isStatic*/isStatic,
-                                               /*isInOut*/isMutating));
+    params.push_back(ParameterList::createSelf(
+        loc, storage->getDeclContext(),
+        /*isStatic*/ isStatic, valueOwnershipFromBits(isMutating)));
   }
   
   // Add a "(value : T, indices...)" argument list.
@@ -1950,8 +1949,9 @@ ConstructorDecl *swift::createImplicitConstructor(TypeChecker &tc,
   
   // Create the constructor.
   DeclName name(context, context.Id_init, paramList);
-  auto *selfParam = ParamDecl::createSelf(Loc, decl,
-                                          /*static*/false, /*inout*/true);
+  auto *selfParam =
+      ParamDecl::createSelf(Loc, decl,
+                            /*static*/ false, ValueOwnership::InOut);
   auto *ctor =
     new (context) ConstructorDecl(name, Loc,
                                   OTK_None, /*FailabilityLoc=*/SourceLoc(),

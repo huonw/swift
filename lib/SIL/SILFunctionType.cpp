@@ -647,7 +647,8 @@ private:
     // Process the self parameter.  Note that we implicitly drop self
     // if this is a static foreign-self import.
     if (!Foreign.Self.isImportAsMember()) {
-      visit(ValueOwnership::Default, /*forSelf=*/true,
+      auto selfFlags = params[numNonSelfParams].getParameterFlags();
+      visit(selfFlags.getValueOwnership(), /*forSelf=*/true,
             origType.getTupleElementType(numNonSelfParams),
             params[numNonSelfParams].getType(), silRepresentation);
     }
@@ -2504,8 +2505,9 @@ TypeConverter::getBridgedFunctionType(AbstractionPattern pattern,
   // Pull out the generic signature.
   CanGenericSignature genericSig = t.getOptGenericSignature();
 
-  auto rebuild = [&](CanType input, CanType result) -> CanAnyFunctionType {
-    return CanAnyFunctionType::get(genericSig, input, result, extInfo);
+  auto rebuild = [&](AnyFunctionType::CanParamArrayRef params,
+                     CanType result) -> CanAnyFunctionType {
+    return CanAnyFunctionType::get(genericSig, params, result, extInfo);
   };
 
   switch (auto rep = t->getExtInfo().getSILRepresentation()) {
@@ -2517,16 +2519,16 @@ TypeConverter::getBridgedFunctionType(AbstractionPattern pattern,
     // No bridging needed for native functions.
     if (t->getExtInfo() == extInfo)
       return t;
-    return rebuild(t.getInput(), t.getResult());
+    return rebuild(t.getParams(), t.getResult());
 
   case SILFunctionTypeRepresentation::CFunctionPointer:
   case SILFunctionTypeRepresentation::Block:
   case SILFunctionTypeRepresentation::ObjCMethod:
-    return rebuild(getBridgedInputType(rep, pattern.getFunctionInputType(),
-                                       t.getInput()),
-                   getBridgedResultType(rep, pattern.getFunctionResultType(),
-                                        t.getResult(),
-                        pattern.hasForeignErrorStrippingResultOptionality()));
+    return rebuild(getBridgedInputParams(rep, pattern.getFunctionInputType(),
+                                         t.getParams()),
+                   getBridgedResultType(
+                       rep, pattern.getFunctionResultType(), t.getResult(),
+                       pattern.hasForeignErrorStrippingResultOptionality()));
   }
   llvm_unreachable("bad calling convention");
 }
@@ -2618,14 +2620,11 @@ TypeConverter::getLoweredFormalTypes(SILDeclRef constant,
   CanGenericSignature genericSig = fnType.getOptGenericSignature();
 
   // The uncurried input types.
-  SmallVector<TupleTypeElt, 4> inputs;
+  SmallVector<ArrayRef<AnyFunctionType::Param>, 4> inputs;
 
   // Merge inputs and generic parameters from the uncurry levels.
   for (;;) {
-    auto canInput = fnType->getInput()->getCanonicalType();
-    auto inputFlags = ParameterTypeFlags().withInOut(isa<InOutType>(canInput));
-    inputs.push_back(TupleTypeElt(canInput->getInOutObjectType(), Identifier(),
-                                  inputFlags));
+    inputs.push_back(fnType->getParams());
 
     // The uncurried function calls all of the intermediate function
     // levels and so throws if any of them do.
@@ -2653,17 +2652,18 @@ TypeConverter::getLoweredFormalTypes(SILDeclRef constant,
 
   case SILFunctionTypeRepresentation::ObjCMethod: {
     assert(inputs.size() == 2);
+    auto first = inputs.front();
     // The "self" parameter should not get bridged unless it's a metatype.
-    if (inputs.front().getType()->is<AnyMetatypeType>()) {
+    if (first.size() == 1 && first.front().getType()->is<AnyMetatypeType>()) {
       auto inputPattern = bridgingFnPattern.getFunctionInputType();
-      inputs[0] = inputs[0].getWithType(
-        getBridgedInputType(rep, inputPattern, CanType(inputs[0].getType())));
+      inputs[0] = getBridgedInputParams(rep, inputPattern, inputs[0])
+                      .getOriginalArray();
     }
 
     auto partialFnPattern = bridgingFnPattern.getFunctionResultType();
-    inputs[1] = inputs[1].getWithType(
-        getBridgedInputType(rep, partialFnPattern.getFunctionInputType(),
-                            CanType(inputs[1].getType())));
+    inputs[1] = getBridgedInputParams(
+                    rep, partialFnPattern.getFunctionInputType(), inputs[1])
+                    .getOriginalArray();
 
     resultType = getBridgedResultType(rep,
                                    partialFnPattern.getFunctionResultType(),
@@ -2677,10 +2677,10 @@ TypeConverter::getLoweredFormalTypes(SILDeclRef constant,
 
     // Bridge the parameters.
     auto partialFnPattern = bridgingFnPattern.getFunctionResultType();
-    inputs[1] = inputs[1].getWithType(
-                getBridgedInputType(rep, partialFnPattern.getFunctionInputType(),
-                                    CanType(inputs[1].getType())));
-    
+    inputs[1] = getBridgedInputParams(
+                    rep, partialFnPattern.getFunctionInputType(), inputs[1])
+                    .getOriginalArray();
+
     resultType = getBridgedResultType(rep,
                                       partialFnPattern.getFunctionResultType(),
                                       resultType, suppressOptionalResult);
@@ -2695,26 +2695,31 @@ TypeConverter::getLoweredFormalTypes(SILDeclRef constant,
   std::reverse(inputs.begin(), inputs.end());
 
   auto buildFinalFunctionType =
-      [&](CanType inputType, CanType resultType) -> CanAnyFunctionType {
-    return CanAnyFunctionType::get(genericSig, inputType, resultType, extInfo);
+      [&](ArrayRef<AnyFunctionType::Param> inputParams,
+          CanType resultType) -> CanAnyFunctionType {
+    return CanAnyFunctionType::get(
+        genericSig, CanAnyFunctionType::CanParamArrayRef(inputParams),
+        resultType, extInfo);
   };
 
   // Build the curried function type.
   CanType curriedResultType = resultType;
   for (auto input : llvm::makeArrayRef(inputs).drop_back()) {
-    curriedResultType = CanFunctionType::get(CanType(input.getType()),
-                                             curriedResultType);
+    curriedResultType =
+        CanFunctionType::get(CanAnyFunctionType::CanParamArrayRef(input),
+                             curriedResultType, AnyFunctionType::ExtInfo());
   }
-  auto curried = buildFinalFunctionType(CanType(inputs.back().getType()),
-                                        curriedResultType);
+  auto curried = buildFinalFunctionType(inputs.back(), curriedResultType);
 
   // Replace the type in the abstraction pattern with the type we just built.
   bridgingFnPattern.rewriteType(genericSig, curried);
 
   // Build the uncurried function type.
-  CanType uncurriedInputType =
-    TupleType::get(inputs, Context)->getCanonicalType();
-  auto uncurried = buildFinalFunctionType(uncurriedInputType, resultType);
+  llvm::SmallVector<AnyFunctionType::Param, 4> uncurriedInputs;
+  for (auto input : inputs) {
+    uncurriedInputs.append(input.begin(), input.end());
+  }
+  auto uncurried = buildFinalFunctionType(uncurriedInputs, resultType);
 
   return { bridgingFnPattern, uncurried };
 }

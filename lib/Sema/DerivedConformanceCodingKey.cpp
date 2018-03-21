@@ -134,8 +134,9 @@ static ValueDecl *deriveInitDecl(TypeChecker &tc, Decl *parentDecl,
   DeclName name(C, C.Id_init, paramList);
 
   // init(rawValue:) decl
-  auto *selfDecl = ParamDecl::createSelf(SourceLoc(), parentDC,
-                                         /*static*/false, /*inout*/true);
+  auto *selfDecl =
+      ParamDecl::createSelf(SourceLoc(), parentDC,
+                            /*static*/ false, ValueOwnership::InOut);
   auto *initDecl =
     new (C) ConstructorDecl(name, SourceLoc(),
                             /*Failability=*/OTK_Optional,

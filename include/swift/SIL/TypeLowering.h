@@ -894,9 +894,10 @@ private:
                               bool canBridgeBool,
                               bool bridgedCollectionsAreOptional);
 
-  CanType getBridgedInputType(SILFunctionTypeRepresentation rep,
-                              AbstractionPattern pattern,
-                              CanType input);
+  AnyFunctionType::CanParamArrayRef
+  getBridgedInputParams(SILFunctionTypeRepresentation rep,
+                        AbstractionPattern pattern,
+                        AnyFunctionType::CanParamArrayRef params);
 
   CanType getBridgedResultType(SILFunctionTypeRepresentation rep,
                                AbstractionPattern pattern,

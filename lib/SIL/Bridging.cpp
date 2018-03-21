@@ -34,50 +34,36 @@ SILType TypeConverter::getLoweredTypeOfGlobal(VarDecl *var) {
   return getLoweredType(origType, origType.getType()).getObjectType();
 }
 
-CanType TypeConverter::getBridgedInputType(SILFunctionTypeRepresentation rep,
-                                           AbstractionPattern pattern,
-                                           CanType input) {
-  if (auto tuple = dyn_cast<TupleType>(input)) {
-    SmallVector<TupleTypeElt, 4> bridgedFields;
-    bool changed = false;
+AnyFunctionType::CanParamArrayRef
+TypeConverter::getBridgedInputParams(SILFunctionTypeRepresentation rep,
+                                     AbstractionPattern pattern,
+                                     AnyFunctionType::CanParamArrayRef params) {
+  SmallVector<AnyFunctionType::Param, 4> bridgedParams;
+  bool changed = false;
+  for (unsigned i : indices(params)) {
+    const auto &param = params[i];
+    auto type = CanType(param.getType());
+    Type bridged = getLoweredBridgedType(pattern.getTupleElementType(i), type,
+                                         rep, TypeConverter::ForArgument);
+    if (!bridged) {
+      Context.Diags.diagnose(SourceLoc(), diag::could_not_find_bridge_type,
+                             type);
 
-    for (unsigned i : indices(tuple->getElements())) {
-      auto &elt = tuple->getElement(i);
-      Type bridged = getLoweredBridgedType(pattern.getTupleElementType(i),
-                                           elt.getType(), rep,
-                                           TypeConverter::ForArgument);
-      if (!bridged) {
-        Context.Diags.diagnose(SourceLoc(), diag::could_not_find_bridge_type,
-                               elt.getType());
-
-        llvm::report_fatal_error("unable to set up the ObjC bridge!");
-      }
-
-      CanType canBridged = bridged->getCanonicalType();
-      if (canBridged != CanType(elt.getType())) {
-        changed = true;
-        bridgedFields.push_back(elt.getWithType(canBridged));
-      } else {
-        bridgedFields.push_back(elt);
-      }
+      llvm::report_fatal_error("unable to set up the ObjC bridge!");
     }
 
-    if (!changed)
-      return input;
-    return CanType(TupleType::get(bridgedFields, input->getASTContext()));
+    CanType canBridged = bridged->getCanonicalType();
+    if (canBridged != type) {
+      changed = true;
+      bridgedParams.push_back(AnyFunctionType::Param(
+          canBridged, param.getLabel(), param.getParameterFlags()));
+    } else {
+      bridgedParams.push_back(param);
+    }
   }
-
-  auto loweredBridgedType = getLoweredBridgedType(pattern, input, rep,
-                                                  TypeConverter::ForArgument);
-
-  if (!loweredBridgedType) {
-    Context.Diags.diagnose(SourceLoc(), diag::could_not_find_bridge_type,
-                           input);
-
-    llvm::report_fatal_error("unable to set up the ObjC bridge!");
-  }
-
-  return loweredBridgedType->getCanonicalType();
+  if (!changed)
+    return params;
+  return Context.AllocateCopy(bridgedParams);
 }
 
 /// Bridge a result type.
@@ -192,19 +178,18 @@ Type TypeConverter::getLoweredCBridgedType(AbstractionPattern pattern,
       // Thick functions (TODO: conditionally) get bridged to blocks.
       // This bridging is more powerful than usual block bridging, however,
       // so we use the ObjCMethod representation.
-      Type newInput =
-          getBridgedInputType(SILFunctionType::Representation::ObjCMethod,
-                              pattern.getFunctionInputType(),
-                              funTy->getInput()->getCanonicalType());
+      auto newInput = getBridgedInputParams(
+          SILFunctionType::Representation::ObjCMethod,
+          pattern.getFunctionInputType(), funTy->getParams());
       Type newResult =
           getBridgedResultType(SILFunctionType::Representation::ObjCMethod,
                                pattern.getFunctionResultType(),
                                funTy->getResult()->getCanonicalType(),
                                /*non-optional*/false);
 
-      return FunctionType::get(newInput, newResult,
+      return FunctionType::get(newInput.getOriginalArray(), newResult,
                                funTy->getExtInfo().withSILRepresentation(
-                                       SILFunctionType::Representation::Block));
+                                   SILFunctionType::Representation::Block));
     }
     }
   }

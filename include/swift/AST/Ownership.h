@@ -53,6 +53,13 @@ enum class ValueOwnership : uint8_t {
   Owned
 };
 
+/// Create a ValueOwnership based on separate booleans.
+///
+/// These are mutually exclusive: at most one should be set.
+ValueOwnership valueOwnershipFromBits(bool isInOut = false,
+                                      bool isShared = false,
+                                      bool isOwned = false);
+
 } // end namespace swift
 
 #endif

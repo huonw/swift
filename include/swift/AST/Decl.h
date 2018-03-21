@@ -4677,6 +4677,19 @@ public:
   static ObjCSelector getDefaultObjCSetterSelector(ASTContext &ctx,
                                                    Identifier propertyName);
 
+  static Specifier specifierFromValueOwnership(ValueOwnership ownership) {
+    switch (ownership) {
+    case ValueOwnership::Default:
+      return VarDecl::Specifier::Default;
+    case ValueOwnership::Shared:
+      return VarDecl::Specifier::Shared;
+    case ValueOwnership::InOut:
+      return VarDecl::Specifier::InOut;
+    case ValueOwnership::Owned:
+      return VarDecl::Specifier::Owned;
+    }
+  }
+
   /// If this is a simple 'let' constant, emit a note with a fixit indicating
   /// that it can be rewritten to a 'var'.  This is used in situations where the
   /// compiler detects obvious attempts to mutate a constant.
@@ -4795,9 +4808,9 @@ public:
   /// Note that this decl is created, but it is returned with an incorrect
   /// DeclContext that needs to be set correctly.  This is automatically handled
   /// when a function is created with this as part of its argument list.
-  static ParamDecl *createSelf(SourceLoc loc, DeclContext *DC,
-                               bool isStatic = false,
-                               bool isInOut = false);
+  static ParamDecl *
+  createSelf(SourceLoc loc, DeclContext *DC, bool isStatic = false,
+             ValueOwnership ownership = ValueOwnership::Default);
 
   // Implement isa/cast/dyncast/etc.
   static bool classof(const Decl *D) { 

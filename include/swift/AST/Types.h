@@ -1616,14 +1616,7 @@ public:
   bool isOwned() const { return value.contains(Owned); }
 
   ValueOwnership getValueOwnership() const {
-    if (isInOut())
-      return ValueOwnership::InOut;
-    else if (isShared())
-      return ValueOwnership::Shared;
-    else if (isOwned())
-      return ValueOwnership::Owned;
-
-    return ValueOwnership::Default;
+    return valueOwnershipFromBits(isInOut(), isShared(), isOwned());
   }
 
   ParameterTypeFlags withVariadic(bool variadic) const {
@@ -3474,23 +3467,6 @@ public:
       case Representation::Closure:
         return false;
       case Representation::ObjCMethod:
-      case Representation::Method:
-      case Representation::WitnessMethod:
-        return true;
-      }
-
-      llvm_unreachable("Unhandled Representation in switch.");
-    }
-
-    bool hasGuaranteedSelfParam() const {
-      switch (getRepresentation()) {
-      case Representation::Thick:
-      case Representation::Block:
-      case Representation::Thin:
-      case Representation::CFunctionPointer:
-      case Representation::ObjCMethod:
-      case Representation::Closure:
-        return false;
       case Representation::Method:
       case Representation::WitnessMethod:
         return true;

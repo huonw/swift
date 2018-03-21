@@ -62,11 +62,10 @@ ParameterList *ParameterList::createUnboundSelf(SourceLoc loc,
 /// Note that this decl is created, but it is returned with an incorrect
 /// DeclContext that needs to be set correctly.  This is automatically handled
 /// when a function is created with this as part of its argument list.
-ParameterList *ParameterList::createSelf(SourceLoc loc,
-                                         DeclContext *DC,
+ParameterList *ParameterList::createSelf(SourceLoc loc, DeclContext *DC,
                                          bool isStaticMethod,
-                                         bool isInOut) {
-  auto *PD = ParamDecl::createSelf(loc, DC, isStaticMethod, isInOut);
+                                         ValueOwnership ownership) {
+  auto *PD = ParamDecl::createSelf(loc, DC, isStaticMethod, ownership);
   return create(DC->getASTContext(), PD);
 }
 

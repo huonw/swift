@@ -1033,9 +1033,8 @@ ParamDecl *PatternBindingInitializer::getImplicitSelfDecl() {
     if (singleVar->getAttrs().hasAttribute<LazyAttr>() &&
         DC->isTypeContext()) {
       bool isInOut = !DC->getDeclaredInterfaceType()->hasReferenceSemantics();
-      SelfParam = ParamDecl::createSelf(SourceLoc(), DC,
-                                        singleVar->isStatic(),
-                                        isInOut);
+      SelfParam = ParamDecl::createSelf(SourceLoc(), DC, singleVar->isStatic(),
+                                        valueOwnershipFromBits(isInOut));
       SelfParam->setDeclContext(this);
     }
   }
@@ -4416,20 +4415,17 @@ ParamDecl *ParamDecl::createUnboundSelf(SourceLoc loc, DeclContext *DC) {
 /// type with the expectation that type-checking will fill in the context
 /// generic parameters.
 ParamDecl *ParamDecl::createSelf(SourceLoc loc, DeclContext *DC,
-                                 bool isStaticMethod, bool isInOut) {
+                                 bool isStaticMethod,
+                                 ValueOwnership ownership) {
   ASTContext &C = DC->getASTContext();
   auto selfInterfaceType = DC->getSelfInterfaceType();
-  auto specifier = VarDecl::Specifier::Default;
   assert(selfInterfaceType);
 
   if (isStaticMethod) {
     selfInterfaceType = MetatypeType::get(selfInterfaceType);
   }
 
-  if (isInOut) {
-    specifier = VarDecl::Specifier::InOut;
-  }
-
+  auto specifier = VarDecl::specifierFromValueOwnership(ownership);
   auto *selfDecl = new (C) ParamDecl(specifier, SourceLoc(),SourceLoc(),
                                      Identifier(), loc, C.Id_self, Type(), DC);
   selfDecl->setImplicit();
@@ -5743,3 +5739,18 @@ NominalTypeDecl *TypeOrExtensionDecl::getBaseNominal() const {
   return getAsDeclContext()->getAsNominalTypeOrNominalTypeExtensionContext();
 }
 bool TypeOrExtensionDecl::isNull() const { return Decl.isNull(); }
+
+ValueOwnership swift::valueOwnershipFromBits(bool isInOut,
+                                             bool isShared,
+                                             bool isOwned) {
+  assert((int)isInOut + (int)isOwned + (int)isShared <= 1 &&
+         "ValueOwnership bits should be mutally exclusive");
+  if (isInOut)
+    return ValueOwnership::InOut;
+  else if (isShared)
+    return ValueOwnership::Shared;
+  else if (isOwned)
+    return ValueOwnership::Owned;
+
+  return ValueOwnership::Default;
+}

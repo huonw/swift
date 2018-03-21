@@ -2858,7 +2858,7 @@ ModuleFile::getDeclCheckedImpl(DeclID DID, Optional<DeclContext *> ForcedContext
     bool mutating = parent->getDeclaredInterfaceType()->hasReferenceSemantics();
     auto *selfDecl = ParamDecl::createSelf(SourceLoc(), parent,
                                            /*static*/ false,
-                                           /*mutating*/ mutating);
+                                           valueOwnershipFromBits(mutating));
     selfDecl->setImplicit();
 
     auto *bodyParams = readParameterList();
@@ -3264,9 +3264,21 @@ ModuleFile::getDeclCheckedImpl(DeclID DID, Optional<DeclContext *> ForcedContext
 
     SmallVector<ParameterList*, 2> paramLists;
     if (DC->isTypeContext()) {
-      auto *selfDecl = ParamDecl::createSelf(SourceLoc(), DC,
-                                             fn->isStatic(),
-                                             fn->isMutating());
+      ValueOwnership ownership;
+      switch (fn->getSelfAccessKind()) {
+      case SelfAccessKind::NonMutating:
+        ownership = ValueOwnership::Default;
+        break;
+      case SelfAccessKind::Mutating:
+        ownership = ValueOwnership::InOut;
+        break;
+      case SelfAccessKind::__Consuming:
+        ownership = ValueOwnership::Owned;
+        break;
+      }
+
+      auto *selfDecl =
+          ParamDecl::createSelf(SourceLoc(), DC, fn->isStatic(), ownership);
       selfDecl->setImplicit();
       paramLists.push_back(ParameterList::create(ctx, selfDecl));
     }
@@ -3921,9 +3933,9 @@ ModuleFile::getDeclCheckedImpl(DeclID DID, Optional<DeclContext *> ForcedContext
 
     dtor->setAccess(std::max(cast<ClassDecl>(DC)->getFormalAccess(),
                              AccessLevel::Internal));
-    auto *selfDecl = ParamDecl::createSelf(SourceLoc(), DC,
-                                           /*static*/ false,
-                                           /*mutating*/ false);
+    auto *selfDecl =
+        ParamDecl::createSelf(SourceLoc(), DC,
+                              /*static*/ false, ValueOwnership::Default);
     selfDecl->setImplicit();
     dtor->setSelfDecl(selfDecl);
 

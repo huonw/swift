@@ -280,10 +280,14 @@ static bool verifySILSelfParameterType(SILDeclRef DeclRef,
   if (DeclRef.isConstructor() || DeclRef.isDestructor())
     return true;
 
-  // Otherwise, if this function type has a guaranteed self parameter type,
-  // make sure that we have a +0 self param.
-  return !FTy->getExtInfo().hasGuaranteedSelfParam() ||
-          PInfo.isGuaranteed() || PInfo.isIndirectMutating();
+  switch (DeclRef.getFuncDecl()->getSelfAccessKind()) {
+  case SelfAccessKind::NonMutating:
+    return PInfo.isGuaranteed();
+  case SelfAccessKind::Mutating:
+    return PInfo.isIndirectMutating();
+  case SelfAccessKind::__Consuming:
+    return PInfo.isConsumed();
+  }
 }
 
 static void addFunctionAttributes(SILFunction *F, DeclAttributes &Attrs,
@@ -377,10 +381,10 @@ SILFunction *SILModule::getOrCreateFunction(SILLocation loc,
     addFunctionAttributes(F, decl->getAttrs(), *this);
   }
 
-  // If this function has a self parameter, make sure that it has a +0 calling
-  // convention. This cannot be done for general function types, since
-  // function_ref's SILFunctionTypes do not have archetypes associated with
-  // it.
+  // If this function has a self parameter, make sure that it has the
+  // appropriate calling convention. This cannot be done for general function
+  // types, since function_ref's SILFunctionTypes do not have archetypes
+  // associated with it.
   CanSILFunctionType FTy = F->getLoweredFunctionType();
   if (FTy->hasSelfParam()) {
     (void)&verifySILSelfParameterType;
