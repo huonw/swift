@@ -301,6 +301,12 @@ public:
   /// Get the property declaration for a behavior conformance, if this is one.
   AbstractStorageDecl *getBehaviorDecl() const;
 
+  /// Get any requirements required for this conformance to be satisfied.
+  ///
+  /// This may fail (return None) if the underlying DeclContext hasn't been
+  /// fully validated yet.
+  Optional<ArrayRef<Requirement>> getConditionalRequirementsIfAvailable() const;
+
   /// Get any additional requirements that are required for this conformance to
   /// be satisfied.
   ArrayRef<Requirement> getConditionalRequirements() const;
@@ -362,7 +368,11 @@ class NormalProtocolConformance : public ProtocolConformance,
 
   /// Any additional requirements that are required for this conformance to
   /// apply, e.g. 'Something: Baz' in 'extension Foo: Bar where Something: Baz'.
-  ArrayRef<Requirement> ConditionalRequirements;
+  ///
+  /// This is only valid if ConditionalRequirementsState == Computed.
+  mutable ArrayRef<Requirement> ConditionalRequirements;
+  enum class CondReqState { Uncomputed, Computing, Computed };
+  mutable CondReqState ConditionalRequirementsState;
 
   /// The lazy member loader provides callbacks for populating imported and
   /// deserialized conformances.
@@ -381,7 +391,7 @@ class NormalProtocolConformance : public ProtocolConformance,
   {
     assert(!conformingType->hasArchetype() &&
            "ProtocolConformances should store interface types");
-    differenceAndStoreConditionalRequirements();
+    computeConditionalRequirementsIfAvailable();
   }
 
   NormalProtocolConformance(Type conformingType,
@@ -394,12 +404,12 @@ class NormalProtocolConformance : public ProtocolConformance,
   {
     assert(!conformingType->hasArchetype() &&
            "ProtocolConformances should store interface types");
-    differenceAndStoreConditionalRequirements();
+    computeConditionalRequirementsIfAvailable();
   }
 
   void resolveLazyInfo() const;
 
-  void differenceAndStoreConditionalRequirements();
+  void computeConditionalRequirementsIfAvailable() const;
 
 public:
   /// Get the protocol being conformed to.
@@ -419,11 +429,23 @@ public:
     }
   }
 
+  /// Get any requirements required for this conformance to be satisfied.
+  ///
+  /// This may fail (return None) if the underlying DeclContext hasn't been
+  /// fully validated yet.
+  Optional<ArrayRef<Requirement>>
+  getConditionalRequirementsIfAvailable() const {
+    computeConditionalRequirementsIfAvailable();
+    if (ConditionalRequirementsState == CondReqState::Computed)
+      return ConditionalRequirements;
+    return None;
+  }
+
   /// Get any additional requirements that are required for this conformance to
   /// be satisfied, e.g. for Array<T>: Equatable, T: Equatable also needs
   /// to be satisfied.
   ArrayRef<Requirement> getConditionalRequirements() const {
-    return ConditionalRequirements;
+    return *getConditionalRequirementsIfAvailable();
   }
 
   /// Retrieve the state of this conformance.
@@ -620,13 +642,15 @@ class SpecializedProtocolConformance : public ProtocolConformance,
 
   /// Any conditional requirements, in substituted form. (E.g. given Foo<T>: Bar
   /// where T: Bar, Foo<Baz<U>> will include Baz<U>: Bar.)
-  ArrayRef<Requirement> ConditionalRequirements;
+  mutable Optional<ArrayRef<Requirement>> ConditionalRequirements;
 
   friend class ASTContext;
 
   SpecializedProtocolConformance(Type conformingType,
                                  ProtocolConformance *genericConformance,
                                  SubstitutionList substitutions);
+
+  void computeConditionalRequirementsIfAvailable() const;
 
 public:
   /// Get the generic conformance from which this conformance was derived,
@@ -645,9 +669,19 @@ public:
   /// this specialized conformance.
   SubstitutionMap getSubstitutionMap() const;
 
+  /// Get any requirements required for this conformance to be satisfied.
+  ///
+  /// This may fail (return None) if the underlying DeclContext hasn't been
+  /// fully validated yet.
+  Optional<ArrayRef<Requirement>>
+  getConditionalRequirementsIfAvailable() const {
+    computeConditionalRequirementsIfAvailable();
+    return ConditionalRequirements;
+  }
+
   /// Get any requirements that must be satisfied for this conformance to apply.
   ArrayRef<Requirement> getConditionalRequirements() const {
-    return ConditionalRequirements;
+    return *getConditionalRequirementsIfAvailable();
   }
 
   /// Get the protocol being conformed to.
@@ -746,6 +780,15 @@ public:
   /// Get the protocol being conformed to.
   ProtocolDecl *getProtocol() const {
     return InheritedConformance->getProtocol();
+  }
+
+  /// Get any requirements required for this conformance to be satisfied.
+  ///
+  /// This may fail (return None) if the underlying DeclContext hasn't been
+  /// fully validated yet.
+  Optional<ArrayRef<Requirement>>
+  getConditionalRequirementsIfAvailable() const {
+    return InheritedConformance->getConditionalRequirementsIfAvailable();
   }
 
   /// Get any requirements that must be satisfied for this conformance to apply.

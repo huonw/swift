@@ -24,6 +24,7 @@
 #include "swift/AST/Substitution.h"
 #include "swift/AST/Types.h"
 #include "swift/AST/TypeWalker.h"
+#include "swift/Basic/Defer.h"
 #include "swift/Basic/Statistic.h"
 #include "swift/ClangImporter/ClangModule.h"
 #include "llvm/ADT/MapVector.h"
@@ -359,6 +360,10 @@ bool NormalProtocolConformance::isSynthesizedNonUnique() const {
   return isa<ClangModuleUnit>(getDeclContext()->getModuleScopeContext());
 }
 
+Optional<ArrayRef<Requirement>>
+ProtocolConformance::getConditionalRequirementsIfAvailable() const {
+  CONFORMANCE_SUBCLASS_DISPATCH(getConditionalRequirementsIfAvailable, ());
+}
 ArrayRef<Requirement> ProtocolConformance::getConditionalRequirements() const {
   CONFORMANCE_SUBCLASS_DISPATCH(getConditionalRequirements, ());
 }
@@ -374,14 +379,35 @@ ProtocolConformanceRef::getConditionalRequirements() const {
     return {};
 }
 
-void NormalProtocolConformance::differenceAndStoreConditionalRequirements() {
-  assert(ConditionalRequirements.empty() &&
-         "should not recompute conditional requirements");
-  auto &ctxt = getProtocol()->getASTContext();
-  auto DC = getDeclContext();
-  // Only conformances in extensions can be conditional
-  if (!isa<ExtensionDecl>(DC))
+void NormalProtocolConformance::computeConditionalRequirementsIfAvailable()
+    const {
+  // Already computed, or currently computing!
+  if (ConditionalRequirementsState != CondReqState::Uncomputed)
     return;
+  ConditionalRequirementsState = CondReqState::Computing;
+  bool failed = false;
+  SWIFT_DEFER {
+    if (failed)
+      // Reset.
+      ConditionalRequirementsState = CondReqState::Uncomputed;
+    else
+      ConditionalRequirementsState = CondReqState::Computed;
+  };
+
+  assert(ConditionalRequirements.empty());
+  auto DC = getDeclContext();
+  auto ext = dyn_cast<ExtensionDecl>(DC);
+
+  // Only conformances declared in extensions can be conditional.
+  if (!ext)
+    return;
+
+  // The extension hasn't been validated enough to compute conditional
+  // requirements, bail.
+  if (!ext->hasValidSignature()) {
+    failed = true;
+    return;
+  }
 
   auto typeSig = DC->getAsNominalTypeOrNominalTypeExtensionContext()
                      ->getGenericSignature();
@@ -398,15 +424,16 @@ void NormalProtocolConformance::differenceAndStoreConditionalRequirements() {
   if (canTypeSig == canExtensionSig)
     return;
 
-  // The extension signature should be a superset of the type signature, meaning
-  // every thing in the type signature either is included too or is implied by
-  // something else. The most important bit is having the same type
-  // parameters. (NB. if/when Swift gets parameterized extensions, this needs to
-  // change.)
+  // The extension signature should be a superset of the type signature,
+  // meaning every thing in the type signature either is included too or is
+  // implied by something else. The most important bit is having the same type
+  // parameters. (NB. if/when Swift gets parameterized extensions, this needs
+  // to change.)
   assert(canTypeSig.getGenericParams() == canExtensionSig.getGenericParams());
 
   // Find the requirements in the extension that aren't proved by the original
   // type, these are the ones that make the conformance conditional.
+  auto &ctxt = getProtocol()->getASTContext();
   ConditionalRequirements =
       ctxt.AllocateCopy(extensionSig->requirementsNotSatisfiedBy(typeSig));
 }
@@ -771,24 +798,40 @@ SpecializedProtocolConformance::SpecializedProtocolConformance(
     GenericSubstitutions(substitutions)
 {
   assert(genericConformance->getKind() != ProtocolConformanceKind::Specialized);
+  computeConditionalRequirementsIfAvailable();
+}
 
-  if (!GenericConformance->getConditionalRequirements().empty()) {
-    // Substitute the conditional requirements so that they're phrased in
-    // terms of the specialized types, not the conformance-declaring decl's
-    // types.
-    auto nominal = GenericConformance->getType()->getAnyNominal();
-    auto module = nominal->getModuleContext();
-    auto subMap = getType()->getContextSubstitutionMap(module, nominal);
+void SpecializedProtocolConformance::computeConditionalRequirementsIfAvailable()
+    const {
+  if (ConditionalRequirements)
+    return;
 
-    SmallVector<Requirement, 4> newReqs;
-    for (auto oldReq : GenericConformance->getConditionalRequirements()) {
-      if (auto newReq = oldReq.subst(QuerySubstitutionMap{subMap},
-                                     LookUpConformanceInModule(module)))
-        newReqs.push_back(*newReq);
-    }
-    auto &ctxt = getProtocol()->getASTContext();
-    ConditionalRequirements = ctxt.AllocateCopy(newReqs);
+  auto genericCondReqs =
+      GenericConformance->getConditionalRequirementsIfAvailable();
+
+  if (!genericCondReqs)
+    return;
+
+  if (genericCondReqs->empty()) {
+    ConditionalRequirements = ArrayRef<Requirement>();
+    return;
   }
+
+  // Substitute the conditional requirements so that they're phrased in
+  // terms of the specialized types, not the conformance-declaring decl's
+  // types.
+  auto nominal = GenericConformance->getType()->getAnyNominal();
+  auto module = nominal->getModuleContext();
+  auto subMap = getType()->getContextSubstitutionMap(module, nominal);
+
+  SmallVector<Requirement, 4> newReqs;
+  for (auto oldReq : *genericCondReqs) {
+    if (auto newReq = oldReq.subst(QuerySubstitutionMap{subMap},
+                                   LookUpConformanceInModule(module)))
+      newReqs.push_back(*newReq);
+  }
+  auto &ctxt = getProtocol()->getASTContext();
+  ConditionalRequirements = ctxt.AllocateCopy(newReqs);
 }
 
 SubstitutionMap SpecializedProtocolConformance::getSubstitutionMap() const {

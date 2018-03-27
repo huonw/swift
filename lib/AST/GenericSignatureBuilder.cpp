@@ -2601,10 +2601,33 @@ static void addConditionalRequirements(GenericSignatureBuilder &builder,
   // Abstract conformances don't have associated decl-contexts/modules, but also
   // don't have conditional requirements.
   if (conformance.isConcrete()) {
+    auto concrete = conformance.getConcrete();
     auto source = FloatingRequirementSource::forInferred(nullptr);
-    for (auto requirement : conformance.getConditionalRequirements()) {
-      builder.addRequirement(requirement, source, inferForModule);
-      ++NumConditionalRequirementsAdded;
+
+    if (auto condReqs = concrete->getConditionalRequirementsIfAvailable()) {
+      for (auto requirement : *condReqs) {
+        builder.addRequirement(requirement, source, inferForModule);
+        ++NumConditionalRequirementsAdded;
+      }
+    } else {
+      auto DC = concrete->getDeclContext();
+      auto ext = cast<ExtensionDecl>(DC);
+      auto params = ext->getGenericParams();
+      if (!params)
+        return;
+
+      auto trailing = params->getTrailingRequirements();
+      if (trailing.empty())
+        return;
+
+      auto type = concrete->getType();
+      auto nominal = type->getAnyNominal();
+      auto module = nominal->getModuleContext();
+      auto subMap = type->getContextSubstitutionMap(module, nominal);
+      for (const auto &rawReq : trailing) {
+        builder.addRequirement(&rawReq, source, &subMap, inferForModule);
+        ++NumConditionalRequirementsAdded;
+      }
     }
   }
 }

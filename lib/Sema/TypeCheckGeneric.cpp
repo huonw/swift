@@ -352,10 +352,13 @@ void TypeChecker::validateRequirements(
   for (auto &req : requirements) {
     if (validateRequirement(whereLoc, req, dc, options, resolver))
       continue;
+  }
 
-    if (builder &&
-        isErrorResult(builder->addRequirement(&req, dc->getParentModule())))
-      req.setInvalid();
+  if (builder) {
+    for (auto &req : requirements) {
+      if (isErrorResult(builder->addRequirement(&req, dc->getParentModule())))
+        req.setInvalid();
+    }
   }
 }
 
@@ -1154,6 +1157,7 @@ GenericEnvironment *TypeChecker::checkGenericEnvironment(
     genericParams->getOuterParameters() && !parentSig;
 
   GenericSignature *sig;
+  Optional<CompleteGenericTypeResolver> completeResolver;
   if (!ext || mustInferRequirements || ext->getTrailingWhereClause() ||
       getExtendedTypeGenericDepth(ext) != genericParams->getDepth()) {
     // Collect the generic parameters.
@@ -1195,6 +1199,7 @@ GenericEnvironment *TypeChecker::checkGenericEnvironment(
     sig = std::move(builder).computeGenericSignature(
                                          genericParams->getSourceRange().Start,
                                          allowConcreteGenericParams);
+    completeResolver.emplace(*this, sig);
 
     // The generic signature builder now has all of the requirements, although
     // there might still be errors that have not yet been diagnosed. Revert the
@@ -1224,17 +1229,16 @@ GenericEnvironment *TypeChecker::checkGenericEnvironment(
     // Re-use the signature of the type being extended.
     sig = ext->getAsNominalTypeOrNominalTypeExtensionContext()
             ->getGenericSignatureOfContext();
+    completeResolver.emplace(*this, sig);
   }
 
-  CompleteGenericTypeResolver completeResolver(*this, sig);
   if (recursivelyVisitGenericParams) {
-    visitOuterToInner(genericParams,
-                      [&](GenericParamList *gpList) {
-      checkGenericParamList(nullptr, gpList, nullptr, &completeResolver);
+    visitOuterToInner(genericParams, [&](GenericParamList *gpList) {
+      checkGenericParamList(nullptr, gpList, nullptr, &*completeResolver);
     });
   } else {
     checkGenericParamList(nullptr, genericParams, parentSig,
-                          &completeResolver);
+                          &*completeResolver);
   }
 
   // Form the generic environment.
