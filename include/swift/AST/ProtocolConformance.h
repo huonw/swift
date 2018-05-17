@@ -315,6 +315,10 @@ public:
                              TypeSubstitutionFn subs,
                              LookupConformanceFn conformances) const;
 
+  /// Substitute the conforming type and produce a ProtocolConformance that
+  /// applies to the substituted type.
+  ProtocolConformance *subst(Type substType, SubstitutionMap subs) const;
+
   void dump() const;
   void dump(llvm::raw_ostream &out, unsigned indent = 0) const;
 };

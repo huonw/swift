@@ -126,6 +126,46 @@ ProtocolConformanceRef::subst(Type origType,
   llvm_unreachable("Invalid conformance substitution");
 }
 
+ProtocolConformanceRef
+ProtocolConformanceRef::subst(Type origType, SubstitutionMap subs) const {
+  auto substType = origType.subst(subs, SubstFlags::UseErrorType);
+
+  // If we have a concrete conformance, we need to substitute the
+  // conformance to apply to the new type.
+  if (isConcrete()) {
+    auto concrete = getConcrete();
+    if (auto classDecl = concrete->getType()->getClassOrBoundGenericClass()) {
+      // If this is a class, we need to traffic in the actual type that
+      // implements the protocol, not 'Self' and not any subclasses (with their
+      // inherited conformances).
+      substType =
+          substType->eraseDynamicSelfType()->getSuperclassForDecl(classDecl);
+    }
+    return ProtocolConformanceRef(getConcrete()->subst(substType, subs));
+  }
+
+  // Opened existentials trivially conform and do not need to go through
+  // substitution map lookup.
+  if (substType->isOpenedExistential())
+    return *this;
+
+  // If the substituted type is an existential, we have a self-conforming
+  // existential being substituted in place of itself. There's no
+  // conformance information in this case, so just return.
+  if (substType->isObjCExistentialType())
+    return *this;
+
+  auto *proto = getRequirement();
+
+  // Check the conformance map.
+  if (auto result =
+          subs.lookupConformance(origType->getCanonicalType(), proto)) {
+    return *result;
+  }
+
+  llvm_unreachable("Invalid conformance substitution");
+}
+
 Type
 ProtocolConformanceRef::getTypeWitnessByName(Type type,
                                              ProtocolConformanceRef conformance,
@@ -687,9 +727,7 @@ ProtocolConformanceRef::getAssociatedConformance(Type conformingType,
     SubstitutionMap::getProtocolSubstitutions(getRequirement(),
                                               conformingType, *this);
   auto abstractConf = ProtocolConformanceRef(protocol);
-  return abstractConf.subst(assocType,
-                            QuerySubstitutionMap{subMap},
-                            LookUpConformanceInSubstitutionMap(subMap));
+  return abstractConf.subst(assocType, subMap);
 }
 
 ProtocolConformanceRef
@@ -876,9 +914,7 @@ SpecializedProtocolConformance::getAssociatedConformance(Type assocType,
        ? conformance.getConcrete()->getType()
        : GenericConformance->getAssociatedType(assocType, resolver));
 
-  return conformance.subst(origType,
-                           QuerySubstitutionMap{subMap},
-                           LookUpConformanceInSubstitutionMap(subMap));
+  return conformance.subst(origType, subMap);
 }
 
 ConcreteDeclRef
@@ -1026,6 +1062,71 @@ ProtocolConformance::subst(Type substType,
     return substType->getASTContext()
       .getSpecializedConformance(substType, genericConformance,
                                  subMap.subst(subs, conformances));
+  }
+  }
+  llvm_unreachable("bad ProtocolConformanceKind");
+}
+
+ProtocolConformance *ProtocolConformance::subst(Type substType,
+                                                SubstitutionMap subs) const {
+  // ModuleDecl::lookupConformance() strips off dynamic Self, so
+  // we should do the same here.
+  if (auto selfType = substType->getAs<DynamicSelfType>())
+    substType = selfType->getSelfType();
+
+  if (getType()->isEqual(substType))
+    return const_cast<ProtocolConformance *>(this);
+
+  switch (getKind()) {
+  case ProtocolConformanceKind::Normal: {
+    if (substType->isSpecialized()) {
+      assert(getType()->isSpecialized() &&
+             "substitution mapped non-specialized to specialized?!");
+      assert(getType()->getNominalOrBoundGenericNominal() ==
+                 substType->getNominalOrBoundGenericNominal() &&
+             "substitution mapped to different nominal?!");
+
+      SubstitutionMap subMap;
+      if (auto *genericSig = getGenericSignature())
+        subMap = genericSig->getSubstitutionMap(subs);
+
+      return substType->getASTContext().getSpecializedConformance(
+          substType, const_cast<ProtocolConformance *>(this), subMap);
+    }
+
+    assert(substType->isEqual(getType()) &&
+           "substitution changed non-specialized type?!");
+    return const_cast<ProtocolConformance *>(this);
+  }
+  case ProtocolConformanceKind::Inherited: {
+    // Substitute the base.
+    auto inheritedConformance =
+        cast<InheritedProtocolConformance>(this)->getInheritedConformance();
+    ProtocolConformance *newBase;
+    if (inheritedConformance->getType()->isSpecialized()) {
+      // Follow the substituted type up the superclass chain until we reach
+      // the underlying class type.
+      auto targetClass =
+          inheritedConformance->getType()->getClassOrBoundGenericClass();
+      auto superclassType = substType->getSuperclassForDecl(targetClass);
+
+      // Substitute into the superclass.
+      newBase = inheritedConformance->subst(superclassType, subs);
+    } else {
+      newBase = inheritedConformance;
+    }
+
+    return substType->getASTContext().getInheritedConformance(substType,
+                                                              newBase);
+  }
+  case ProtocolConformanceKind::Specialized: {
+    // Substitute the substitutions in the specialized conformance.
+    auto spec = cast<SpecializedProtocolConformance>(this);
+    auto genericConformance = spec->getGenericConformance();
+    auto subMap = spec->getSubstitutionMap();
+
+    return substType->getASTContext().getSpecializedConformance(
+        substType, genericConformance, subMap.subst(subs));
   }
   }
   llvm_unreachable("bad ProtocolConformanceKind");
