@@ -205,3 +205,36 @@ func g<T : Init & Derived>(_: T.Type) {
   _ = T(x: ())
   _ = T(y: ())
 }
+
+// SR-8028
+class Generic<Value> {}
+
+protocol SecureCodingProvider {
+    associatedtype T : Generic<Self> // expected-note 2 {{protocol requires nested type 'T'}}
+}
+struct SR8028_1: SecureCodingProvider {
+    class T: Generic<SR8028_1> {}
+}
+
+struct SR8028_2<A>: SecureCodingProvider {
+    class T: Generic<SR8028_2<A>> {}
+}
+
+struct SR8028_3<A>: SecureCodingProvider { // expected-error {{type 'SR8028_3<A>' does not conform to protocol 'SecureCodingProvider'}}
+    class T: Generic<A> {} // expected-note {{possibly intended match 'SR8028_3<A>.T' does not inherit from 'Generic<SR8028_3<A>>'}}
+}
+
+struct SR8028_4<A, B>: SecureCodingProvider { // expected-error {{type 'SR8028_4<A, B>' does not conform to protocol 'SecureCodingProvider'}}
+    class T: Generic<SR8028_4<B, A>> {} // expected-note {{possibly intended match 'SR8028_4<A, B>.T' does not inherit from 'Generic<SR8028_4<A, B>>'}}
+}
+
+// FIXME: this crashes
+protocol SecureCodingProvider2 {
+    associatedtype T : Generic<U> // expected-note {{protocol requires nested type 'T'}}
+    associatedtype U
+}
+
+struct SR8028_5<A>: SecureCodingProvider2 { // expected-error {{type 'SR8028_5<A>' does not conform to protocol 'SecureCodingProvider2'}}
+    class T: Generic<A> {} // expected-note {{possibly intended match 'SR8028_5<A>.T' does not inherit from 'Generic<SR8028_5<T>.U>'}}
+    struct U {}
+}

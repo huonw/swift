@@ -3034,9 +3034,10 @@ ResolveWitnessResult ConformanceChecker::resolveWitnessViaDefault(
 # pragma mark Type witness resolution
 
 CheckTypeWitnessResult swift::checkTypeWitness(TypeChecker &tc, DeclContext *dc,
-                                               ProtocolDecl *proto,
-                                               AssociatedTypeDecl *assocType, 
+                                               NormalProtocolConformance *conf,
+                                               AssociatedTypeDecl *assocType,
                                                Type type) {
+  auto *proto = conf->getProtocol();
   auto *genericSig = proto->getGenericSignature();
   auto *depTy = DependentMemberType::get(proto->getSelfInterfaceType(),
                                          assocType);
@@ -3048,8 +3049,16 @@ CheckTypeWitnessResult swift::checkTypeWitness(TypeChecker &tc, DeclContext *dc,
                                               : type;
 
   if (auto superclass = genericSig->getSuperclassBound(depTy)) {
-    if (!superclass->isExactSuperclassOf(contextType))
-      return superclass;
+    // the superclass might be a generic phrased in terms of the protocol's
+    // elements (e.g. `Generic<Self>` or `Generic<Self.T>`) so we need to make
+    // sure that we use the real types in this conformance.
+    auto subMap = SubstitutionMap::getProtocolSubstitutions(
+        proto, conf->getType(), ProtocolConformanceRef(conf));
+
+    auto superclassInConformance =
+        dc->mapTypeIntoContext(superclass.subst(subMap));
+    if (!superclassInConformance->isExactSuperclassOf(contextType))
+      return superclassInConformance;
   }
 
   // Check protocol conformances.
@@ -3124,8 +3133,8 @@ ResolveWitnessResult ConformanceChecker::resolveTypeWitnessViaLookup(
         continue;
 
     // Check this type against the protocol requirements.
-    if (auto checkResult =
-            checkTypeWitness(TC, DC, Proto, assocType, candidate.MemberType)) {
+    if (auto checkResult = checkTypeWitness(TC, DC, Conformance, assocType,
+                                            candidate.MemberType)) {
       nonViable.push_back({candidate.Member, checkResult});
     } else {
       viable.push_back(candidate);

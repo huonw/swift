@@ -89,7 +89,7 @@ public:
 ///
 /// \returns an empty result on success, or a description of the error.
 CheckTypeWitnessResult checkTypeWitness(TypeChecker &tc, DeclContext *dc,
-                                        ProtocolDecl *proto,
+                                        NormalProtocolConformance *conf,
                                         AssociatedTypeDecl *assocType,
                                         Type type);
 
